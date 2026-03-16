@@ -47,6 +47,8 @@ public class ProductController {
             p.setStock(updated.getStock());
             p.setPrice(updated.getPrice());
             p.setImageUrl(updated.getImageUrl());
+            p.setSupplier(updated.getSupplier());
+            p.setPrintingCost(updated.getPrintingCost());
             return ResponseEntity.ok(repo.save(p));
         }).orElse(ResponseEntity.notFound().build());
     }

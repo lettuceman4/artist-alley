@@ -27,6 +27,11 @@ public class Product {
     @Column(precision = 10, scale = 2)
     private BigDecimal price;
 
+    private String supplier;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal printingCost;
+
     private String imageUrl;
 
     public Long getId() { return id; }
@@ -41,6 +46,10 @@ public class Product {
     public void setPrice(BigDecimal price) { this.price = price; }
     public String getImageUrl() { return imageUrl; }
     public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
+    public String getSupplier() { return supplier; }
+    public void setSupplier(String supplier) { this.supplier = supplier; }
+    public BigDecimal getPrintingCost() { return printingCost; }
+    public void setPrintingCost(BigDecimal printingCost) { this.printingCost = printingCost; }
     public String getProductCode() { return productCode; }
     public void setProductCode(String productCode) { this.productCode = productCode; }
 }

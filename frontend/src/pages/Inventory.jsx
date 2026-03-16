@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchProducts, createProduct, updateProduct, deleteProduct, fetchCategories } from '../api'
 
-const empty = { name: '', category: '', stock: '', price: '', imageUrl: '', productCode: '' }
+const empty = { name: '', category: '', stock: '', price: '', imageUrl: '', productCode: '', supplier: '', printingCost: '' }
 
 export default function Inventory() {
   const [products, setProducts] = useState([])
@@ -20,7 +20,7 @@ export default function Inventory() {
     e.preventDefault()
     setError('')
     try {
-      const data = { ...form, stock: Number(form.stock), price: Number(form.price) }
+      const data = { ...form, stock: Number(form.stock), price: Number(form.price), printingCost: form.printingCost !== '' ? Number(form.printingCost) : null }
       if (editId) {
         await updateProduct(editId, data)
       } else {
@@ -40,7 +40,7 @@ export default function Inventory() {
     setEditId(p.id)
     const cat = p.category || ''
     setCustomCategory(cat !== '' && !categories.includes(cat))
-    setForm({ name: p.name, category: cat, stock: p.stock, price: p.price, imageUrl: p.imageUrl || '', productCode: p.productCode || '' })
+    setForm({ name: p.name, category: cat, stock: p.stock, price: p.price, imageUrl: p.imageUrl || '', productCode: p.productCode || '', supplier: p.supplier || '', printingCost: p.printingCost ?? '' })
   }
 
   const handleDelete = async (id) => {
@@ -114,6 +114,14 @@ export default function Inventory() {
               <label>Price ($) *</label>
               <input required type="number" min="0" step="0.01" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} />
             </div>
+            <div>
+              <label>Supplier</label>
+              <input value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })} placeholder="e.g. Printify" />
+            </div>
+            <div>
+              <label>Printing Cost ($)</label>
+              <input type="number" min="0" step="0.01" value={form.printingCost} onChange={e => setForm({ ...form, printingCost: e.target.value })} placeholder="0.00" />
+            </div>
           </div>
           {error && <div className="error">{error}</div>}
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
@@ -130,7 +138,7 @@ export default function Inventory() {
         ) : (
           <table>
             <thead>
-              <tr><th>Code</th><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Actions</th></tr>
+              <tr><th>Code</th><th>Name</th><th>Category</th><th>Supplier</th><th>Print Cost</th><th>Price</th><th>Stock</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {products.map(p => (
@@ -138,6 +146,8 @@ export default function Inventory() {
                   <td><code>{p.productCode || '—'}</code></td>
                   <td>{p.name}</td>
                   <td>{p.category || '—'}</td>
+                  <td>{p.supplier || '—'}</td>
+                  <td>{p.printingCost != null ? `$${Number(p.printingCost).toFixed(2)}` : '—'}</td>
                   <td>${Number(p.price).toFixed(2)}</td>
                   <td>
                     <span className={`badge ${p.stock <= 3 ? 'badge-low' : 'badge-ok'}`}>{p.stock}</span>

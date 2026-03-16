@@ -252,6 +252,8 @@ export function calcScaleFactor(tableRealW, tableRealH, canvasPixelW, canvasPixe
 export function FixtureRect({
   fixture,
   scaleFactor,
+  canvasRealW,
+  canvasRealH,
   isSelected,
   color,
   unit,
@@ -282,8 +284,11 @@ export function FixtureRect({
     function onMove(ev) {
       const dx = ev.clientX - startX
       const dy = ev.clientY - startY
-      const newW = Math.max(1, startW + dx / scaleFactor)
-      const newH = Math.max(1, startH + dy / scaleFactor)
+      // clamp so fixture can't grow past canvas edge
+      const maxW = (canvasRealW ?? Infinity) - fixture.x
+      const maxH = (canvasRealH ?? Infinity) - fixture.y
+      const newW = Math.min(maxW, Math.max(1, startW + dx / scaleFactor))
+      const newH = Math.min(maxH, Math.max(1, startH + dy / scaleFactor))
       onResize && onResize(fixture.id, newW, newH)
     }
 
@@ -297,8 +302,9 @@ export function FixtureRect({
   }
 
   // ── Task 9.3: Delete button click ─────────────────────────────────────────
-  function handleDeleteClick(e) {
+  function handleDeletePointerDown(e) {
     e.stopPropagation()
+    e.preventDefault()
     onDelete && onDelete(fixture.id)
   }
 
@@ -321,22 +327,22 @@ export function FixtureRect({
 
       {isSelected && (
         <>
-          {/* Task 9.2: Dimension label */}
+          {/* Task 9.2: Dimension label — inside fixture, top-center */}
           <text
             x={x + w / 2}
-            y={y - 6}
+            y={y + 12}
             textAnchor="middle"
             fontSize={11}
-            fill="#333"
+            fill="#fff"
             style={{ pointerEvents: 'none', userSelect: 'none' }}
           >
             {Math.round(fixture.width * 10) / 10} × {Math.round(fixture.height * 10) / 10} {unit}
           </text>
 
-          {/* Task 9.2: Resize handle — bottom-right corner */}
+          {/* Task 9.2: Resize handle — bottom-right corner, inset */}
           <rect
-            x={x + w - HANDLE_SIZE / 2}
-            y={y + h - HANDLE_SIZE / 2}
+            x={x + w - HANDLE_SIZE - 1}
+            y={y + h - HANDLE_SIZE - 1}
             width={HANDLE_SIZE}
             height={HANDLE_SIZE}
             fill="#fff"
@@ -346,18 +352,18 @@ export function FixtureRect({
             onPointerDown={handleResizePointerDown}
           />
 
-          {/* Task 9.3: Delete button — top-right corner */}
+          {/* Task 9.3: Delete button — top-right corner, inset */}
           <circle
-            cx={x + w + DELETE_R}
-            cy={y - DELETE_R}
+            cx={x + w - DELETE_R - 1}
+            cy={y + DELETE_R + 1}
             r={DELETE_R}
             fill="#e74c3c"
             style={{ cursor: 'pointer' }}
-            onClick={handleDeleteClick}
+            onPointerDown={handleDeletePointerDown}
           />
           <text
-            x={x + w + DELETE_R}
-            y={y - DELETE_R + 4}
+            x={x + w - DELETE_R - 1}
+            y={y + DELETE_R + 5}
             textAnchor="middle"
             fontSize={11}
             fill="#fff"
@@ -638,6 +644,8 @@ export function BoothCanvas({
               key={fixture.id}
               fixture={fixture}
               scaleFactor={scaleFactor}
+              canvasRealW={canvasRealW}
+              canvasRealH={canvasRealH}
               isSelected={isSelected}
               color={color}
               unit={table.unit}
