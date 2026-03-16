@@ -2,713 +2,280 @@ import { useReducer, useEffect, useState, useRef } from 'react'
 import { fetchBoothLayouts, saveBoothLayout, deleteBoothLayout } from '../api'
 import { useEvent } from '../EventContext'
 
-// ─── Task 1.1: Fixture type definitions ───────────────────────────────────────
-
-export const FIXTURE_TYPES = [
-  { type: 'rack',  label: 'Rack',  color: '#6c3fc5', defaultWidth: 30,  defaultHeight: 150 },
-  { type: 'box',   label: 'Box',   color: '#27ae60', defaultWidth: 40,  defaultHeight: 30  },
-  { type: 'stand', label: 'Stand', color: '#e67e22', defaultWidth: 20,  defaultHeight: 80  },
+// ── Shape definitions ─────────────────────────────────────────────────────────
+export const BASIC_SHAPES = [
+  { type: 'rect',     label: 'Rectangle', color: '#6c3fc5', defaultWidth: 60, defaultHeight: 40 },
+  { type: 'circle',   label: 'Circle',    color: '#27ae60', defaultWidth: 50, defaultHeight: 50 },
+  { type: 'triangle', label: 'Triangle',  color: '#e67e22', defaultWidth: 60, defaultHeight: 50 },
+  { type: 'line',     label: 'Line',      color: '#2980b9', defaultWidth: 80, defaultHeight: 8  },
 ]
+export const FIXTURE_TYPES = BASIC_SHAPES // backward compat
 
-// ─── Task 1.2: Default state and action types ──────────────────────────────────
-
+// ── State ─────────────────────────────────────────────────────────────────────
 export const DEFAULT_TABLE = { width: 180, depth: 60, height: 75, unit: 'cm' }
 export const DEFAULT_STATE = { table: DEFAULT_TABLE, view: 'top', fixtures: [] }
-
 export const ACTION_TYPES = {
-  SET_TABLE_DIM:  'SET_TABLE_DIM',
-  SET_UNIT:       'SET_UNIT',
-  SET_VIEW:       'SET_VIEW',
-  ADD_FIXTURE:    'ADD_FIXTURE',
-  MOVE_FIXTURE:   'MOVE_FIXTURE',
-  RESIZE_FIXTURE: 'RESIZE_FIXTURE',
-  DELETE_FIXTURE: 'DELETE_FIXTURE',
-  CLEAR_LAYOUT:   'CLEAR_LAYOUT',
-  LOAD_LAYOUT:    'LOAD_LAYOUT',
+  SET_TABLE_DIM: 'SET_TABLE_DIM', SET_UNIT: 'SET_UNIT', SET_VIEW: 'SET_VIEW',
+  ADD_FIXTURE: 'ADD_FIXTURE', MOVE_FIXTURE: 'MOVE_FIXTURE', RESIZE_FIXTURE: 'RESIZE_FIXTURE',
+  DELETE_FIXTURE: 'DELETE_FIXTURE', CLEAR_LAYOUT: 'CLEAR_LAYOUT', LOAD_LAYOUT: 'LOAD_LAYOUT',
 }
 
-// ─── Task 1.3: Reducer ─────────────────────────────────────────────────────────
-
-const CM_TO_IN = 1 / 2.54
-const IN_TO_CM = 2.54
-
-function convertDim(value, fromUnit, toUnit) {
-  if (fromUnit === toUnit) return value
-  const factor = fromUnit === 'cm' ? CM_TO_IN : IN_TO_CM
-  return Math.round(value * factor * 100) / 100
+const CM_TO_IN = 1 / 2.54, IN_TO_CM = 2.54
+function convertDim(v, from, to) {
+  if (from === to) return v
+  return Math.round(v * (from === 'cm' ? CM_TO_IN : IN_TO_CM) * 100) / 100
 }
 
 export function layoutReducer(state, action) {
   switch (action.type) {
     case ACTION_TYPES.SET_TABLE_DIM:
       return { ...state, table: { ...state.table, [action.field]: action.value } }
-
     case ACTION_TYPES.SET_UNIT: {
-      const from = state.table.unit
-      const to = action.unit
-      return {
-        ...state,
-        table: {
-          width:  convertDim(state.table.width,  from, to),
-          depth:  convertDim(state.table.depth,  from, to),
-          height: convertDim(state.table.height, from, to),
-          unit: to,
-        },
-      }
+      const { unit: from } = state.table, to = action.unit
+      return { ...state, table: { width: convertDim(state.table.width, from, to), depth: convertDim(state.table.depth, from, to), height: convertDim(state.table.height, from, to), unit: to } }
     }
-
-    case ACTION_TYPES.SET_VIEW:
-      return { ...state, view: action.view }
-
-    case ACTION_TYPES.ADD_FIXTURE:
-      return { ...state, fixtures: [...state.fixtures, action.fixture] }
-
+    case ACTION_TYPES.SET_VIEW: return { ...state, view: action.view }
+    case ACTION_TYPES.ADD_FIXTURE: return { ...state, fixtures: [...state.fixtures, action.fixture] }
     case ACTION_TYPES.MOVE_FIXTURE:
-      return {
-        ...state,
-        fixtures: state.fixtures.map(f =>
-          f.id === action.id ? { ...f, x: action.x, y: action.y } : f
-        ),
-      }
-
+      return { ...state, fixtures: state.fixtures.map(f => f.id === action.id ? { ...f, x: action.x, y: action.y } : f) }
     case ACTION_TYPES.RESIZE_FIXTURE:
-      return {
-        ...state,
-        fixtures: state.fixtures.map(f =>
-          f.id === action.id
-            ? { ...f, width: Math.max(1, action.width), height: Math.max(1, action.height) }
-            : f
-        ),
-      }
-
+      return { ...state, fixtures: state.fixtures.map(f => f.id === action.id ? { ...f, width: Math.max(1, action.width), height: Math.max(1, action.height) } : f) }
     case ACTION_TYPES.DELETE_FIXTURE:
       return { ...state, fixtures: state.fixtures.filter(f => f.id !== action.id) }
-
-    case ACTION_TYPES.CLEAR_LAYOUT:
-      return DEFAULT_STATE
-
-    case ACTION_TYPES.LOAD_LAYOUT:
-      return { ...state, ...action.layout }
-
-    default:
-      return state
+    case ACTION_TYPES.CLEAR_LAYOUT: return DEFAULT_STATE
+    case ACTION_TYPES.LOAD_LAYOUT: return { ...state, ...action.layout }
+    default: return state
   }
 }
 
-// ─── Task 2.1: Layout validation ──────────────────────────────────────────────
-
-export function isValidLayout(parsed) {
-  if (parsed === null || typeof parsed !== 'object') return false
-
-  // Validate table
-  const { table } = parsed
-  if (table === null || typeof table !== 'object') return false
-  if (typeof table.width !== 'number' || table.width <= 0) return false
+export function isValidLayout(p) {
+  if (!p || typeof p !== 'object') return false
+  const { table } = p
+  if (!table || typeof table.width !== 'number' || table.width <= 0) return false
   if (typeof table.depth !== 'number' || table.depth <= 0) return false
   if (typeof table.height !== 'number' || table.height <= 0) return false
   if (table.unit !== 'cm' && table.unit !== 'in') return false
-
-  // Validate view
-  if (parsed.view !== 'top' && parsed.view !== 'front') return false
-
-  // Validate fixtures
-  if (!Array.isArray(parsed.fixtures)) return false
-  for (const f of parsed.fixtures) {
-    if (typeof f.id !== 'string') return false
-    if (typeof f.type !== 'string') return false
-    if (typeof f.x !== 'number') return false
-    if (typeof f.y !== 'number') return false
-    if (typeof f.width !== 'number' || f.width <= 0) return false
-    if (typeof f.height !== 'number' || f.height <= 0) return false
+  if (p.view !== 'top' && p.view !== 'front') return false
+  if (!Array.isArray(p.fixtures)) return false
+  for (const f of p.fixtures) {
+    if (typeof f.id !== 'string' || typeof f.type !== 'string') return false
+    if (typeof f.x !== 'number' || typeof f.y !== 'number') return false
+    if (typeof f.width !== 'number' || f.width <= 0 || typeof f.height !== 'number' || f.height <= 0) return false
   }
-
   return true
 }
 
-// ─── Task 3.1 + 3.2: DimensionPanel component ─────────────────────────────────
-
-export function DimensionPanel({ table, onTableChange, onUnitChange, errors: externalErrors = {} }) {
-  const [localErrors, setLocalErrors] = useState({})
-
-  const errors = { ...externalErrors, ...localErrors }
-
-  function handleChange(field, rawValue) {
-    const parsed = parseFloat(rawValue)
-    if (rawValue === '' || isNaN(parsed) || parsed <= 0) {
-      setLocalErrors(prev => ({ ...prev, [field]: 'Must be a number greater than 0' }))
-    } else {
-      setLocalErrors(prev => { const next = { ...prev }; delete next[field]; return next })
-      onTableChange(field, parsed)
-    }
+// ── DimensionPanel ────────────────────────────────────────────────────────────
+export function DimensionPanel({ table, onTableChange, onUnitChange }) {
+  const [errs, setErrs] = useState({})
+  function handleChange(field, raw) {
+    const v = parseFloat(raw)
+    if (!raw || isNaN(v) || v <= 0) setErrs(e => ({ ...e, [field]: 'Must be > 0' }))
+    else { setErrs(e => { const n = { ...e }; delete n[field]; return n }); onTableChange(field, v) }
   }
-
-  const inputStyle = {
-    width: '80px',
-    padding: '4px 6px',
-    border: '1px solid #ccc',
-    borderRadius: '4px',
-    fontSize: '14px',
-  }
-
-  const errorStyle = {
-    color: '#c0392b',
-    fontSize: '12px',
-    marginTop: '2px',
-  }
-
-  const fieldStyle = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  }
-
-  const labelStyle = {
-    fontSize: '13px',
-    fontWeight: '500',
-    color: '#333',
-  }
-
-  const unitBtnStyle = (active) => ({
-    padding: '4px 12px',
-    border: '1px solid #6c3fc5',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '13px',
-    background: active ? '#6c3fc5' : '#fff',
-    color: active ? '#fff' : '#6c3fc5',
-    fontWeight: active ? '600' : '400',
-  })
-
+  const inp = { width: '80px', padding: '4px 6px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '14px' }
+  const unitBtn = (active) => ({ padding: '4px 12px', border: '1px solid #6c3fc5', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', background: active ? '#6c3fc5' : '#fff', color: active ? '#fff' : '#6c3fc5', fontWeight: active ? '600' : '400' })
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', padding: '12px 0' }}>
-      {['width', 'depth', 'height'].map(field => (
-        <div key={field} style={fieldStyle}>
-          <label style={labelStyle}>
-            {field.charAt(0).toUpperCase() + field.slice(1)} ({table.unit})
-          </label>
-          <input
-            type="number"
-            value={table[field]}
-            onChange={e => handleChange(field, e.target.value)}
-            style={inputStyle}
-            aria-label={`Table ${field} in ${table.unit}`}
-          />
-          {errors[field] && <span style={errorStyle}>{errors[field]}</span>}
+      {['width', 'depth', 'height'].map(f => (
+        <div key={f} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <label style={{ fontSize: '13px', fontWeight: '500' }}>{f.charAt(0).toUpperCase() + f.slice(1)} ({table.unit})</label>
+          <input type="number" value={table[f]} onChange={e => handleChange(f, e.target.value)} style={inp} />
+          {errs[f] && <span style={{ color: '#c0392b', fontSize: '12px' }}>{errs[f]}</span>}
         </div>
       ))}
-
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        <span style={labelStyle}>Unit</span>
+        <span style={{ fontSize: '13px', fontWeight: '500' }}>Unit</span>
         <div style={{ display: 'flex', gap: '4px' }}>
-          <button style={unitBtnStyle(table.unit === 'cm')} onClick={() => onUnitChange('cm')}>cm</button>
-          <button style={unitBtnStyle(table.unit === 'in')} onClick={() => onUnitChange('in')}>in</button>
+          <button style={unitBtn(table.unit === 'cm')} onClick={() => onUnitChange('cm')}>cm</button>
+          <button style={unitBtn(table.unit === 'in')} onClick={() => onUnitChange('in')}>in</button>
         </div>
       </div>
     </div>
   )
 }
 
-// ─── Task 4.1: ViewToggle component ───────────────────────────────────────────
-
+// ── ViewToggle ────────────────────────────────────────────────────────────────
 export function ViewToggle({ view, onChange }) {
-  const btnStyle = (active) => ({
-    padding: '6px 16px',
-    border: '1px solid #6c3fc5',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: active ? '600' : '400',
-    background: active ? '#6c3fc5' : '#fff',
-    color: active ? '#fff' : '#6c3fc5',
-  })
-
+  const btn = (active) => ({ padding: '6px 16px', border: '1px solid #6c3fc5', cursor: 'pointer', fontSize: '14px', fontWeight: active ? '600' : '400', background: active ? '#6c3fc5' : '#fff', color: active ? '#fff' : '#6c3fc5' })
   return (
     <div style={{ display: 'inline-flex' }}>
-      <button
-        style={{ ...btnStyle(view === 'top'), borderRadius: '4px 0 0 4px', borderRight: 'none' }}
-        onClick={() => onChange('top')}
-        aria-pressed={view === 'top'}
-      >
-        Top View
-      </button>
-      <button
-        style={{ ...btnStyle(view === 'front'), borderRadius: '0 4px 4px 0' }}
-        onClick={() => onChange('front')}
-        aria-pressed={view === 'front'}
-      >
-        Front View
-      </button>
+      <button style={{ ...btn(view === 'top'), borderRadius: '4px 0 0 4px', borderRight: 'none' }} onClick={() => onChange('top')}>Top View</button>
+      <button style={{ ...btn(view === 'front'), borderRadius: '0 4px 4px 0' }} onClick={() => onChange('front')}>Front View</button>
     </div>
   )
 }
 
-// ─── Task 5.1: calcScaleFactor pure function ──────────────────────────────────
-
 export const MARGIN_FACTOR = 0.85
-
-export function calcScaleFactor(tableRealW, tableRealH, canvasPixelW, canvasPixelH) {
-  return Math.min(canvasPixelW / tableRealW, canvasPixelH / tableRealH) * MARGIN_FACTOR
+export function calcScaleFactor(rw, rh, pw, ph) {
+  return Math.min(pw / rw, ph / rh) * MARGIN_FACTOR
 }
 
-// ─── Tasks 9.1, 9.2, 9.3: FixtureRect component ──────────────────────────────
+// ── FixtureRect — renders any shape ──────────────────────────────────────────
+export function FixtureRect({ fixture, scaleFactor, canvasRealW, canvasRealH, isSelected, color, unit, onPointerDown, onResize, onDelete, onSelect, opacity = 0.85 }) {
+  const x = fixture.x * scaleFactor, y = fixture.y * scaleFactor
+  const w = fixture.width * scaleFactor, h = fixture.height * scaleFactor
+  const HS = 10, DR = 9
 
-export function FixtureRect({
-  fixture,
-  scaleFactor,
-  canvasRealW,
-  canvasRealH,
-  isSelected,
-  color,
-  unit,
-  onPointerDown,
-  onResize,
-  onDelete,
-  onSelect,
-  opacity = 0.8,
-}) {
-  const x = fixture.x * scaleFactor
-  const y = fixture.y * scaleFactor
-  const w = fixture.width * scaleFactor
-  const h = fixture.height * scaleFactor
-
-  const HANDLE_SIZE = 8
-  const DELETE_R = 8
-
-  // ── Task 9.2: Resize handle pointer logic ──────────────────────────────────
   function handleResizePointerDown(e) {
     e.stopPropagation()
-    const startX = e.clientX
-    const startY = e.clientY
-    const startW = fixture.width
-    const startH = fixture.height
-
+    const sx = e.clientX, sy = e.clientY, sw = fixture.width, sh = fixture.height
     e.currentTarget.setPointerCapture(e.pointerId)
-
     function onMove(ev) {
-      const dx = ev.clientX - startX
-      const dy = ev.clientY - startY
-      // clamp so fixture can't grow past canvas edge
-      const maxW = (canvasRealW ?? Infinity) - fixture.x
-      const maxH = (canvasRealH ?? Infinity) - fixture.y
-      const newW = Math.min(maxW, Math.max(1, startW + dx / scaleFactor))
-      const newH = Math.min(maxH, Math.max(1, startH + dy / scaleFactor))
-      onResize && onResize(fixture.id, newW, newH)
+      const maxW = (canvasRealW ?? Infinity) - fixture.x, maxH = (canvasRealH ?? Infinity) - fixture.y
+      onResize && onResize(fixture.id, Math.min(maxW, Math.max(1, sw + (ev.clientX - sx) / scaleFactor)), Math.min(maxH, Math.max(1, sh + (ev.clientY - sy) / scaleFactor)))
     }
-
-    function onUp() {
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-    }
-
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
+    function onUp() { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp) }
+    window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp)
   }
 
-  // ── Task 9.3: Delete button click ─────────────────────────────────────────
-  function handleDeletePointerDown(e) {
-    e.stopPropagation()
-    e.preventDefault()
-    onDelete && onDelete(fixture.id)
+  function handleDeletePointerDown(e) { e.stopPropagation(); e.preventDefault(); onDelete && onDelete(fixture.id) }
+
+  const bodyProps = { fill: color, opacity, stroke: isSelected ? '#fff' : 'rgba(0,0,0,0.18)', strokeWidth: isSelected ? 2 : 1, style: { cursor: 'grab' }, onPointerDown: e => onPointerDown && onPointerDown(e, fixture), onClick: () => onSelect && onSelect(fixture.id) }
+
+  function renderBody() {
+    if (fixture.type === 'circle') return <ellipse cx={x + w / 2} cy={y + h / 2} rx={w / 2} ry={h / 2} {...bodyProps} />
+    if (fixture.type === 'triangle') return <polygon points={`${x + w / 2},${y} ${x + w},${y + h} ${x},${y + h}`} {...bodyProps} />
+    return <rect x={x} y={y} width={w} height={h} rx={fixture.type === 'line' ? 3 : 5} {...bodyProps} />
   }
 
   return (
     <g>
-      {/* Task 9.1: Fixture body */}
-      <rect
-        x={x}
-        y={y}
-        width={w}
-        height={h}
-        fill={color}
-        opacity={opacity}
-        stroke={isSelected ? '#fff' : 'none'}
-        strokeWidth={isSelected ? 2 : 0}
-        style={{ cursor: 'grab' }}
-        onPointerDown={e => onPointerDown && onPointerDown(e, fixture)}
-        onClick={() => onSelect && onSelect(fixture.id)}
-      />
-
-      {isSelected && (
-        <>
-          {/* Task 9.2: Dimension label — inside fixture, top-center */}
-          <text
-            x={x + w / 2}
-            y={y + 12}
-            textAnchor="middle"
-            fontSize={11}
-            fill="#fff"
-            style={{ pointerEvents: 'none', userSelect: 'none' }}
-          >
-            {Math.round(fixture.width * 10) / 10} × {Math.round(fixture.height * 10) / 10} {unit}
-          </text>
-
-          {/* Task 9.2: Resize handle — bottom-right corner, inset */}
-          <rect
-            x={x + w - HANDLE_SIZE - 1}
-            y={y + h - HANDLE_SIZE - 1}
-            width={HANDLE_SIZE}
-            height={HANDLE_SIZE}
-            fill="#fff"
-            stroke="#6c3fc5"
-            strokeWidth={1.5}
-            style={{ cursor: 'se-resize' }}
-            onPointerDown={handleResizePointerDown}
-          />
-
-          {/* Task 9.3: Delete button — top-right corner, inset */}
-          <circle
-            cx={x + w - DELETE_R - 1}
-            cy={y + DELETE_R + 1}
-            r={DELETE_R}
-            fill="#e74c3c"
-            style={{ cursor: 'pointer' }}
-            onPointerDown={handleDeletePointerDown}
-          />
-          <text
-            x={x + w - DELETE_R - 1}
-            y={y + DELETE_R + 5}
-            textAnchor="middle"
-            fontSize={11}
-            fill="#fff"
-            fontWeight="bold"
-            style={{ cursor: 'pointer', pointerEvents: 'none', userSelect: 'none' }}
-          >
-            ×
-          </text>
-        </>
+      {renderBody()}
+      {fixture.label && (
+        <text x={x + w / 2} y={y + h / 2 + 4} textAnchor="middle" fontSize={Math.min(13, w / Math.max(1, fixture.label.length * 0.65))} fill="#fff" fontWeight="600" style={{ pointerEvents: 'none', userSelect: 'none' }}>{fixture.label}</text>
       )}
+      {isSelected && (<>
+        <text x={x + w / 2} y={y + 11} textAnchor="middle" fontSize={10} fill="#fff" style={{ pointerEvents: 'none', userSelect: 'none' }}>{Math.round(fixture.width * 10) / 10} × {Math.round(fixture.height * 10) / 10} {unit}</text>
+        <rect x={x + w - HS - 1} y={y + h - HS - 1} width={HS} height={HS} fill="#fff" stroke="#6c3fc5" strokeWidth={1.5} rx={2} style={{ cursor: 'se-resize' }} onPointerDown={handleResizePointerDown} />
+        <circle cx={x + w - DR - 1} cy={y + DR + 1} r={DR} fill="#e74c3c" style={{ cursor: 'pointer' }} onPointerDown={handleDeletePointerDown} />
+        <text x={x + w - DR - 1} y={y + DR + 5} textAnchor="middle" fontSize={12} fill="#fff" fontWeight="bold" style={{ cursor: 'pointer', pointerEvents: 'none', userSelect: 'none' }}>×</text>
+      </>)}
     </g>
   )
 }
 
-// ─── Task 5.2 + 7.1 + 7.2 + 7.3: BoothCanvas component ──────────────────────
-
-export function BoothCanvas({
-  table,
-  view,
-  fixtures,
-  selectedId,
-  onFixtureDrop,
-  onFixtureMove,
-  onFixtureResize,
-  onFixtureSelect,
-  onFixtureDelete,
-  dragState,
-  onDragStateChange,
-}) {
+// ── BoothCanvas ───────────────────────────────────────────────────────────────
+export function BoothCanvas({ table, view, fixtures, selectedId, onFixtureDrop, onFixtureMove, onFixtureResize, onFixtureSelect, onFixtureDelete, dragState, onDragStateChange }) {
   const [canvasSize, setCanvasSize] = useState({ width: 600, height: 800 })
-  const [ghostPos, setGhostPos] = useState(null) // { x, y, width, height, color } in SVG pixels
-  const wrapperRef = useRef(null)
-  const svgRef = useRef(null)
+  const [ghostPos, setGhostPos] = useState(null)
+  const wrapperRef = useRef(null), svgRef = useRef(null)
 
   useEffect(() => {
-    const el = wrapperRef.current
-    if (!el) return
-    const observer = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect
-        setCanvasSize({ width, height })
-      }
-    })
-    observer.observe(el)
-    return () => observer.disconnect()
+    const el = wrapperRef.current; if (!el) return
+    const obs = new ResizeObserver(entries => { for (const e of entries) setCanvasSize({ width: e.contentRect.width, height: e.contentRect.height }) })
+    obs.observe(el); return () => obs.disconnect()
   }, [])
 
-  const tableRealW = table.width
-  const tableRealH = view === 'top' ? table.depth : table.height
-
+  const tableRealW = table.width, tableRealH = view === 'top' ? table.depth : table.height
   const scaleFactor = calcScaleFactor(tableRealW, tableRealH, canvasSize.width, canvasSize.height)
-
-  const tablePixelW = tableRealW * scaleFactor
-  const tablePixelH = tableRealH * scaleFactor
-  const tableOriginX = (canvasSize.width - tablePixelW) / 2
-  const tableOriginY = (canvasSize.height - tablePixelH) / 2
-
-  // ── Task 7.1: Pointer helpers ──────────────────────────────────────────────
+  const tablePixelW = tableRealW * scaleFactor, tablePixelH = tableRealH * scaleFactor
+  const tableOriginX = (canvasSize.width - tablePixelW) / 2, tableOriginY = (canvasSize.height - tablePixelH) / 2
+  const canvasRealW = canvasSize.width / scaleFactor, canvasRealH = canvasSize.height / scaleFactor
 
   function getSvgCoords(e) {
-    const rect = svgRef.current.getBoundingClientRect()
-    const pointerSvgX = (e.clientX - rect.left) * (canvasSize.width / rect.width)
-    const pointerSvgY = (e.clientY - rect.top) * (canvasSize.height / rect.height)
-    return { pointerSvgX, pointerSvgY }
+    const r = svgRef.current.getBoundingClientRect()
+    return { pointerSvgX: (e.clientX - r.left) * (canvasSize.width / r.width), pointerSvgY: (e.clientY - r.top) * (canvasSize.height / r.height) }
   }
+  function isWithinBounds(e) { const r = svgRef.current.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom }
+  function clamp(x, y, fw, fh) { return { x: Math.max(0, Math.min(x, canvasRealW - fw)), y: Math.max(0, Math.min(y, canvasRealH - fh)) } }
+  function getDefaults(type) { const b = BASIC_SHAPES.find(s => s.type === type); return { w: b?.defaultWidth ?? 60, h: b?.defaultHeight ?? 40 } }
 
-  function isWithinBounds(e) {
-    const rect = svgRef.current.getBoundingClientRect()
-    return (
-      e.clientX >= rect.left &&
-      e.clientX <= rect.right &&
-      e.clientY >= rect.top &&
-      e.clientY <= rect.bottom
-    )
-  }
-
-  // Canvas real-world dimensions (the full workable area)
-  const canvasRealW = canvasSize.width / scaleFactor
-  const canvasRealH = canvasSize.height / scaleFactor
-
-  function toCanvasCoords(pointerSvgX, pointerSvgY, offsetX = 0, offsetY = 0) {
-    const x = (pointerSvgX - offsetX) / scaleFactor
-    const y = (pointerSvgY - offsetY) / scaleFactor
-    return { x, y }
-  }
-
-  function clampToCanvas(x, y, fixtureW, fixtureH) {
-    return {
-      x: Math.max(0, Math.min(x, canvasRealW - fixtureW)),
-      y: Math.max(0, Math.min(y, canvasRealH - fixtureH)),
-    }
-  }
-
-  // ── Task 7.1: SVG onPointerDown (background) ──────────────────────────────
-
-  function handleSvgPointerDown(e) {
-    // Only fires when clicking the SVG background (fixture rects call stopPropagation)
-    if (dragState?.source === 'palette') {
-      // Palette drag already in progress — do nothing, wait for pointerup
-    } else {
-      onFixtureSelect && onFixtureSelect(null)
-    }
-    // Capture pointer on SVG for smooth drag
-    e.currentTarget.setPointerCapture(e.pointerId)
-  }
-
-  // ── Task 7.1: SVG onPointerMove ───────────────────────────────────────────
+  function handleSvgPointerDown(e) { if (dragState?.source !== 'palette') onFixtureSelect && onFixtureSelect(null); e.currentTarget.setPointerCapture(e.pointerId) }
 
   function handleSvgPointerMove(e) {
     if (!dragState) return
-    const { pointerSvgX, pointerSvgY } = getSvgCoords(e)
-
+    const { pointerSvgX: px, pointerSvgY: py } = getSvgCoords(e)
     if (dragState.source === 'palette') {
-      const typeDef = FIXTURE_TYPES.find(t => t.type === dragState.type)
-      if (!typeDef) return
-      const { x, y } = clampToCanvas(
-        pointerSvgX / scaleFactor,
-        pointerSvgY / scaleFactor,
-        typeDef.defaultWidth,
-        typeDef.defaultHeight,
-      )
-      setGhostPos({
-        x: x * scaleFactor,
-        y: y * scaleFactor,
-        width: typeDef.defaultWidth * scaleFactor,
-        height: typeDef.defaultHeight * scaleFactor,
-        color: typeDef.color,
-      })
+      const { w, h } = getDefaults(dragState.type)
+      const { x, y } = clamp(px / scaleFactor, py / scaleFactor, w, h)
+      setGhostPos({ x: x * scaleFactor, y: y * scaleFactor, width: w * scaleFactor, height: h * scaleFactor, color: dragState.color || '#6c3fc5' })
     } else if (dragState.source === 'canvas') {
-      const fixture = fixtures.find(f => f.id === dragState.fixtureId)
-      if (!fixture) return
-      const raw = toCanvasCoords(pointerSvgX, pointerSvgY, dragState.offsetX, dragState.offsetY)
-      const { x, y } = clampToCanvas(raw.x, raw.y, fixture.width, fixture.height)
-      const typeDef = FIXTURE_TYPES.find(t => t.type === fixture.type)
-      setGhostPos({
-        x: x * scaleFactor,
-        y: y * scaleFactor,
-        width: fixture.width * scaleFactor,
-        height: fixture.height * scaleFactor,
-        color: typeDef ? typeDef.color : '#999',
-      })
+      const f = fixtures.find(f => f.id === dragState.fixtureId); if (!f) return
+      const { x, y } = clamp((px - dragState.offsetX) / scaleFactor, (py - dragState.offsetY) / scaleFactor, f.width, f.height)
+      setGhostPos({ x: x * scaleFactor, y: y * scaleFactor, width: f.width * scaleFactor, height: f.height * scaleFactor, color: f.color || '#6c3fc5' })
     }
   }
-
-  // ── Task 7.2 + 7.3: SVG onPointerUp ──────────────────────────────────────
 
   function handleSvgPointerUp(e) {
     if (!dragState) return
-
-    if (!isWithinBounds(e)) {
-      // Task 7.3: outside bounds — revert
-      onDragStateChange && onDragStateChange(null)
-      setGhostPos(null)
-      return
-    }
-
-    const { pointerSvgX, pointerSvgY } = getSvgCoords(e)
-
+    if (!isWithinBounds(e)) { onDragStateChange && onDragStateChange(null); setGhostPos(null); return }
+    const { pointerSvgX: px, pointerSvgY: py } = getSvgCoords(e)
     if (dragState.source === 'palette') {
-      // Task 7.2: commit palette drop
-      const typeDef = FIXTURE_TYPES.find(t => t.type === dragState.type)
-      if (!typeDef) {
-        onDragStateChange && onDragStateChange(null)
-        return
-      }
-      const { x, y } = clampToCanvas(
-        pointerSvgX / scaleFactor,
-        pointerSvgY / scaleFactor,
-        typeDef.defaultWidth,
-        typeDef.defaultHeight,
-      )
-      onFixtureDrop && onFixtureDrop(dragState.type, x, y)
-      onDragStateChange && onDragStateChange(null)
-      setGhostPos(null)
+      const { w, h } = getDefaults(dragState.type)
+      const { x, y } = clamp(px / scaleFactor, py / scaleFactor, w, h)
+      onFixtureDrop && onFixtureDrop(dragState.type, x, y, dragState.label, dragState.color)
     } else if (dragState.source === 'canvas') {
-      // Task 7.2: commit canvas move
-      const fixture = fixtures.find(f => f.id === dragState.fixtureId)
-      if (!fixture) {
-        onDragStateChange && onDragStateChange(null)
-        return
-      }
-      const raw = toCanvasCoords(pointerSvgX, pointerSvgY, dragState.offsetX, dragState.offsetY)
-      const { x, y } = clampToCanvas(raw.x, raw.y, fixture.width, fixture.height)
-      onFixtureMove && onFixtureMove(dragState.fixtureId, x, y)
-      onDragStateChange && onDragStateChange(null)
-      setGhostPos(null)
+      const f = fixtures.find(f => f.id === dragState.fixtureId)
+      if (f) { const { x, y } = clamp((px - dragState.offsetX) / scaleFactor, (py - dragState.offsetY) / scaleFactor, f.width, f.height); onFixtureMove && onFixtureMove(dragState.fixtureId, x, y) }
     }
+    onDragStateChange && onDragStateChange(null); setGhostPos(null)
   }
-
-  // ── Task 7.1: Fixture rect onPointerDown ──────────────────────────────────
 
   function handleFixturePointerDown(e, fixture) {
     e.stopPropagation()
-    const { pointerSvgX, pointerSvgY } = getSvgCoords(e)
-    // offset in SVG pixels from fixture canvas-origin
-    const offsetX = pointerSvgX - fixture.x * scaleFactor
-    const offsetY = pointerSvgY - fixture.y * scaleFactor
-    onDragStateChange && onDragStateChange({
-      fixtureId: fixture.id,
-      source: 'canvas',
-      offsetX,
-      offsetY,
-    })
+    const { pointerSvgX: px, pointerSvgY: py } = getSvgCoords(e)
+    onDragStateChange && onDragStateChange({ fixtureId: fixture.id, source: 'canvas', offsetX: px - fixture.x * scaleFactor, offsetY: py - fixture.y * scaleFactor })
     onFixtureSelect && onFixtureSelect(fixture.id)
     e.currentTarget.closest('svg')?.setPointerCapture(e.pointerId)
   }
 
   return (
-    <div
-      ref={wrapperRef}
-      style={{ width: '100%', minHeight: '800px', height: '800px', border: '1px solid #ddd', borderRadius: '6px', overflow: 'hidden', background: '#f8f8f8' }}
-    >
-      <svg
-        ref={svgRef}
-        width="100%"
-        height="100%"
-        viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`}
-        onPointerDown={handleSvgPointerDown}
-        onPointerMove={handleSvgPointerMove}
-        onPointerUp={handleSvgPointerUp}
-        style={{ cursor: dragState ? 'grabbing' : 'default' }}
-      >
-        {/* Workable area background */}
-        <rect
-          x={0}
-          y={0}
-          width={canvasSize.width}
-          height={canvasSize.height}
-          fill="#f8f8f8"
-          stroke="#ccc"
-          strokeWidth={1.5}
-          strokeDasharray="6 3"
-        />
-
-        {/* Workable area label */}
-        <text
-          x={8}
-          y={16}
-          fontSize={10}
-          fill="#bbb"
-          style={{ pointerEvents: 'none', userSelect: 'none' }}
-        >
-          Workable area
-        </text>
-
-        {/* TableRect */}
-        <rect
-          x={tableOriginX}
-          y={tableOriginY}
-          width={tablePixelW}
-          height={tablePixelH}
-          fill={dragState?.source === 'palette' ? '#ede7ff' : '#f5f0ff'}
-          stroke="#6c3fc5"
-          strokeWidth={2}
-        />
-
-        {/* Table label */}
-        <text
-          x={tableOriginX + tablePixelW / 2}
-          y={tableOriginY + tablePixelH / 2}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize={11}
-          fill="#9b7fd4"
-          style={{ pointerEvents: 'none', userSelect: 'none' }}
-        >
-          Table
-        </text>
-
-        {/* Fixture rects */}
-        {fixtures.map(fixture => {
-          const typeDef = FIXTURE_TYPES.find(t => t.type === fixture.type)
-          const color = typeDef ? typeDef.color : '#999'
-          const isSelected = fixture.id === selectedId
-          const isDragging = dragState?.source === 'canvas' && dragState.fixtureId === fixture.id
-          return (
-            <FixtureRect
-              key={fixture.id}
-              fixture={fixture}
-              scaleFactor={scaleFactor}
-              canvasRealW={canvasRealW}
-              canvasRealH={canvasRealH}
-              isSelected={isSelected}
-              color={color}
-              unit={table.unit}
-              onPointerDown={handleFixturePointerDown}
-              onResize={onFixtureResize}
-              onDelete={onFixtureDelete}
-              onSelect={onFixtureSelect}
-              opacity={isDragging ? 0.25 : 0.8}
-            />
-          )
-        })}
-
-        {/* Ghost preview during drag */}
-        {ghostPos && (
-          <rect
-            x={ghostPos.x}
-            y={ghostPos.y}
-            width={ghostPos.width}
-            height={ghostPos.height}
-            fill={ghostPos.color}
-            opacity={0.6}
-            stroke="#fff"
-            strokeWidth={2}
-            strokeDasharray="4 2"
-            style={{ pointerEvents: 'none' }}
-          />
-        )}
+    <div ref={wrapperRef} style={{ width: '100%', minHeight: '800px', height: '800px', border: '1px solid #ddd', borderRadius: '6px', overflow: 'hidden', background: '#f8f8f8' }}>
+      <svg ref={svgRef} width="100%" height="100%" viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`} onPointerDown={handleSvgPointerDown} onPointerMove={handleSvgPointerMove} onPointerUp={handleSvgPointerUp} style={{ cursor: dragState ? 'grabbing' : 'default' }}>
+        <rect x={0} y={0} width={canvasSize.width} height={canvasSize.height} fill="#f8f8f8" stroke="#ccc" strokeWidth={1.5} strokeDasharray="6 3" />
+        <text x={8} y={16} fontSize={10} fill="#bbb" style={{ pointerEvents: 'none', userSelect: 'none' }}>Workable area</text>
+        <rect x={tableOriginX} y={tableOriginY} width={tablePixelW} height={tablePixelH} fill={dragState?.source === 'palette' ? '#ede7ff' : '#f5f0ff'} stroke="#6c3fc5" strokeWidth={2} />
+        <text x={tableOriginX + tablePixelW / 2} y={tableOriginY + tablePixelH / 2} textAnchor="middle" dominantBaseline="middle" fontSize={11} fill="#9b7fd4" style={{ pointerEvents: 'none', userSelect: 'none' }}>Table</text>
+        {fixtures.map(f => (
+          <FixtureRect key={f.id} fixture={f} scaleFactor={scaleFactor} canvasRealW={canvasRealW} canvasRealH={canvasRealH} isSelected={f.id === selectedId} color={f.color || '#6c3fc5'} unit={table.unit} onPointerDown={handleFixturePointerDown} onResize={onFixtureResize} onDelete={onFixtureDelete} onSelect={onFixtureSelect} opacity={dragState?.source === 'canvas' && dragState.fixtureId === f.id ? 0.25 : 0.85} />
+        ))}
+        {ghostPos && <rect x={ghostPos.x} y={ghostPos.y} width={ghostPos.width} height={ghostPos.height} fill={ghostPos.color} opacity={0.45} stroke="#fff" strokeWidth={2} strokeDasharray="4 2" style={{ pointerEvents: 'none' }} />}
       </svg>
     </div>
   )
 }
 
-// ─── Task 6.1: FixturePalette component ───────────────────────────────────────
-
-export function FixturePalette({ fixtureTypes, onDragStart }) {
+// ── FixturePalette — shapes + custom builder ──────────────────────────────────
+export function FixturePalette({ onDragStart }) {
+  const [customLabel, setCustomLabel] = useState('')
+  const [customColor, setCustomColor] = useState('#e74c3c')
+  const [customShape, setCustomShape] = useState('rect')
+  const ICONS = { rect: '▬', circle: '●', triangle: '▲', line: '━' }
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px' }}>
-      {fixtureTypes.map(ft => (
-        <div
-          key={ft.type}
-          onPointerDown={() => onDragStart(ft.type)}
-          style={{
-            padding: '8px 12px',
-            borderRadius: '6px',
-            background: ft.color,
-            color: '#fff',
-            fontWeight: '600',
-            fontSize: '14px',
-            cursor: 'grab',
-            userSelect: 'none',
-          }}
-        >
-          {ft.label}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '12px', minWidth: '145px' }}>
+      <div style={{ fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>Basic Shapes</div>
+      {BASIC_SHAPES.map(s => (
+        <div key={s.type} onPointerDown={() => onDragStart(s.type, s.label, s.color)}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 10px', borderRadius: '6px', background: s.color, color: '#fff', fontWeight: '600', fontSize: '13px', cursor: 'grab', userSelect: 'none' }}>
+          <span style={{ fontSize: '15px' }}>{ICONS[s.type]}</span>{s.label}
         </div>
       ))}
+      <div style={{ fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '8px', marginBottom: '2px' }}>Custom Shape</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', padding: '8px', background: '#f5f5f5', borderRadius: '6px' }}>
+        <input value={customLabel} onChange={e => setCustomLabel(e.target.value)} placeholder="Label (optional)" style={{ padding: '4px 7px', borderRadius: '4px', border: '1px solid #ddd', fontSize: '12px' }} />
+        <div style={{ display: 'flex', gap: '4px' }}>
+          {['rect', 'circle', 'triangle'].map(s => (
+            <button key={s} onClick={() => setCustomShape(s)} title={s}
+              style={{ flex: 1, padding: '3px', borderRadius: '4px', cursor: 'pointer', fontSize: '14px', border: customShape === s ? '2px solid #6c3fc5' : '1px solid #ddd', background: customShape === s ? '#ede7ff' : '#fff' }}>
+              {ICONS[s]}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <label style={{ fontSize: '11px', color: '#666' }}>Color</label>
+          <input type="color" value={customColor} onChange={e => setCustomColor(e.target.value)} style={{ width: '36px', height: '24px', border: 'none', cursor: 'pointer', borderRadius: '3px' }} />
+        </div>
+        <div onPointerDown={() => onDragStart(customShape, customLabel || 'Custom', customColor)}
+          style={{ padding: '6px', borderRadius: '5px', background: customColor, color: '#fff', fontWeight: '600', fontSize: '12px', textAlign: 'center', cursor: 'grab', userSelect: 'none' }}>
+          + Add Shape
+        </div>
+      </div>
     </div>
   )
 }
 
-// ─── Task 2.2 + Placeholder component (full UI in task 10) ────────────────────
-
+// ── Main component ────────────────────────────────────────────────────────────
 const LS_KEY = 'booth-visualiser-layout'
 
 function BoothVisualiser() {
@@ -716,172 +283,79 @@ function BoothVisualiser() {
   const [selectedId, setSelectedId] = useState(null)
   const [dragState, setDragState] = useState(null)
   const { activeEventId } = useEvent()
-
   const [savedLayouts, setSavedLayouts] = useState([])
   const [saveName, setSaveName] = useState('')
   const [saveStatus, setSaveStatus] = useState('')
 
-  const loadLayouts = () =>
-    fetchBoothLayouts(activeEventId).then(setSavedLayouts).catch(console.error)
+  const loadLayouts = () => fetchBoothLayouts(activeEventId).then(setSavedLayouts).catch(console.error)
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_KEY)
-      if (raw !== null) {
-        const parsed = JSON.parse(raw)
-        if (isValidLayout(parsed)) {
-          dispatch({ type: ACTION_TYPES.LOAD_LAYOUT, layout: parsed })
-        } else {
-          localStorage.removeItem(LS_KEY)
-        }
-      }
-    } catch {
-      localStorage.removeItem(LS_KEY)
-    }
+      if (raw) { const p = JSON.parse(raw); if (isValidLayout(p)) dispatch({ type: ACTION_TYPES.LOAD_LAYOUT, layout: p }); else localStorage.removeItem(LS_KEY) }
+    } catch { localStorage.removeItem(LS_KEY) }
   }, [])
 
   useEffect(() => { loadLayouts() }, [activeEventId])
+  useEffect(() => { try { localStorage.setItem(LS_KEY, JSON.stringify(state)) } catch { /* ignore */ } }, [state])
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(state))
-    } catch { /* ignore */ }
-  }, [state])
-
-  function handleTableChange(field, value) {
-    dispatch({ type: ACTION_TYPES.SET_TABLE_DIM, field, value })
-  }
-  function handleUnitChange(unit) {
-    dispatch({ type: ACTION_TYPES.SET_UNIT, unit })
-  }
-  function handleViewChange(view) {
-    dispatch({ type: ACTION_TYPES.SET_VIEW, view })
-  }
-  function handleFixtureDrop(type, x, y) {
+  function handleFixtureDrop(type, x, y, label, color) {
     const id = crypto.randomUUID?.() ?? String(Date.now())
-    const typeDef = FIXTURE_TYPES.find(t => t.type === type)
-    if (!typeDef) return
-    dispatch({ type: ACTION_TYPES.ADD_FIXTURE, fixture: { id, type, x, y, width: typeDef.defaultWidth, height: typeDef.defaultHeight } })
-  }
-  function handleFixtureMove(id, x, y) {
-    dispatch({ type: ACTION_TYPES.MOVE_FIXTURE, id, x, y })
-  }
-  function handleFixtureResize(id, width, height) {
-    dispatch({ type: ACTION_TYPES.RESIZE_FIXTURE, id, width, height })
-  }
-  function handleFixtureDelete(id) {
-    dispatch({ type: ACTION_TYPES.DELETE_FIXTURE, id })
-    setSelectedId(null)
-  }
-  function handleFixtureSelect(id) {
-    setSelectedId(id)
-  }
-  function handleDragStart(type) {
-    setDragState({ type, source: 'palette' })
-  }
-  function handleClearLayout() {
-    dispatch({ type: ACTION_TYPES.CLEAR_LAYOUT })
-    localStorage.removeItem(LS_KEY)
-    setSelectedId(null)
-    setDragState(null)
+    const base = BASIC_SHAPES.find(s => s.type === type)
+    dispatch({ type: ACTION_TYPES.ADD_FIXTURE, fixture: { id, type, x, y, width: base?.defaultWidth ?? 60, height: base?.defaultHeight ?? 40, label: label || '', color: color || base?.color || '#6c3fc5' } })
   }
 
   async function handleSave() {
     if (!saveName.trim()) { setSaveStatus('Enter a name first.'); return }
-    setSaveStatus('')
     try {
       await saveBoothLayout(saveName.trim(), JSON.stringify(state), activeEventId)
-      setSaveName('')
-      setSaveStatus('✓ Saved')
-      loadLayouts()
+      setSaveName(''); setSaveStatus('✓ Saved'); loadLayouts()
       setTimeout(() => setSaveStatus(''), 2000)
-    } catch (e) {
-      setSaveStatus('✗ ' + e.message)
-    }
+    } catch (e) { setSaveStatus('✗ ' + e.message) }
   }
 
   function handleLoadLayout(layout) {
-    try {
-      const parsed = JSON.parse(layout.layoutJson)
-      if (isValidLayout(parsed)) {
-        dispatch({ type: ACTION_TYPES.LOAD_LAYOUT, layout: parsed })
-        setSelectedId(null)
-      }
-    } catch { /* ignore */ }
-  }
-
-  async function handleDeleteLayout(id) {
-    await deleteBoothLayout(id)
-    loadLayouts()
+    try { const p = JSON.parse(layout.layoutJson); if (isValidLayout(p)) { dispatch({ type: ACTION_TYPES.LOAD_LAYOUT, layout: p }); setSelectedId(null) } } catch { /* ignore */ }
   }
 
   return (
     <div id="booth-visualiser" style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px' }}>
-      <DimensionPanel table={state.table} onTableChange={handleTableChange} onUnitChange={handleUnitChange} />
-
+      <DimensionPanel table={state.table} onTableChange={(f, v) => dispatch({ type: ACTION_TYPES.SET_TABLE_DIM, field: f, value: v })} onUni
+tChange={u => dispatch({ type: ACTION_TYPES.SET_UNIT, unit: u })} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-        <ViewToggle view={state.view} onChange={handleViewChange} />
+        <ViewToggle view={state.view} onChange={v => dispatch({ type: ACTION_TYPES.SET_VIEW, view: v })} />
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-          <input
-            value={saveName}
-            onChange={e => setSaveName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSave()}
-            placeholder="Layout name…"
-            style={{ padding: '5px 8px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px', width: '150px' }}
-          />
-          <button onClick={handleSave} style={{ border: '1px solid #6c3fc5', color: '#6c3fc5', background: '#fff', padding: '5px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}>
-            💾 Save
-          </button>
+          <input value={saveName} onChange={e => setSaveName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSave()} placeholder="Layout name…" style={{ padding: '5px 8px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px', width: '150px' }} />
+          <button onClick={handleSave} style={{ border: '1px solid #6c3fc5', color: '#6c3fc5', background: '#fff', padding: '5px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}>💾 Save</button>
           {saveStatus && <span style={{ fontSize: '12px', color: saveStatus.startsWith('✓') ? '#27ae60' : '#e74c3c' }}>{saveStatus}</span>}
         </div>
-        <button onClick={handleClearLayout} style={{ border: '1px solid #e74c3c', color: '#e74c3c', background: '#fff', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
-          Clear Layout
-        </button>
+        <button onClick={() => { dispatch({ type: ACTION_TYPES.CLEAR_LAYOUT }); localStorage.removeItem(LS_KEY); setSelectedId(null); setDragState(null) }} style={{ border: '1px solid #e74c3c', color: '#e74c3c', background: '#fff', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>Clear Layout</button>
       </div>
-
       {savedLayouts.length > 0 && (
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', padding: '6px 0', borderBottom: '1px solid #eee', alignItems: 'center' }}>
           <span style={{ fontSize: '12px', color: '#888' }}>Saved:</span>
           {savedLayouts.map(l => (
             <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: '3px', background: '#f5f0ff', borderRadius: '4px', padding: '3px 8px', fontSize: '13px' }}>
-              <button
-                onClick={() => handleLoadLayout(l)}
-                title={`Saved: ${new Date(l.savedAt).toLocaleString()}`}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6c3fc5', fontWeight: '600', padding: 0 }}
-              >
-                {l.name}
-              </button>
-              <button
-                onClick={() => handleDeleteLayout(l.id)}
-                title="Delete"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e74c3c', fontSize: '11px', padding: '0 2px' }}
-              >
-                ✕
-              </button>
+              <button onClick={() => handleLoadLayout(l)} title={`Saved: ${new Date(l.savedAt).toLocaleString()}`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6c3fc5', fontWeight: '600', padding: 0 }}>{l.name}</button>
+              <button onClick={async () => { const { deleteBoothLayout: del } = await import('../api'); await del(l.id); loadLayouts() }} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e74c3c', fontSize: '11px', padding: '0 2px' }}>✕</button>
             </div>
           ))}
         </div>
       )}
-
       <div style={{ display: 'flex', gap: '16px' }}>
         <div style={{ flex: 1 }}>
-          <BoothCanvas
-            table={state.table}
-            view={state.view}
-            fixtures={state.fixtures}
-            selectedId={selectedId}
+          <BoothCanvas table={state.table} view={state.view} fixtures={state.fixtures} selectedId={selectedId}
             onFixtureDrop={handleFixtureDrop}
-            onFixtureMove={handleFixtureMove}
-            onFixtureResize={handleFixtureResize}
-            onFixtureSelect={handleFixtureSelect}
-            onFixtureDelete={handleFixtureDelete}
-            dragState={dragState}
-            onDragStateChange={setDragState}
-          />
+            onFixtureMove={(id, x, y) => dispatch({ type: ACTION_TYPES.MOVE_FIXTURE, id, x, y })}
+            onFixtureResize={(id, w, h) => dispatch({ type: ACTION_TYPES.RESIZE_FIXTURE, id, width: w, height: h })}
+            onFixtureSelect={setSelectedId}
+            onFixtureDelete={id => { dispatch({ type: ACTION_TYPES.DELETE_FIXTURE, id }); setSelectedId(null) }}
+            dragState={dragState} onDragStateChange={setDragState} />
         </div>
-        <FixturePalette fixtureTypes={FIXTURE_TYPES} onDragStart={handleDragStart} />
+        <FixturePalette onDragStart={(type, label, color) => setDragState({ type, source: 'palette', label, color })} />
       </div>
     </div>
   )
 }
+
 export default BoothVisualiser
