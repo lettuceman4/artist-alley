@@ -1,5 +1,44 @@
 const BASE = '/api'
 
+// Events
+export async function fetchEvents() {
+  const res = await fetch(`${BASE}/events`)
+  if (!res.ok) throw new Error('Failed to fetch events')
+  return res.json()
+}
+
+export async function createEvent(data) {
+  const res = await fetch(`${BASE}/events`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to create event')
+  return res.json()
+}
+
+export async function updateEvent(id, data) {
+  const res = await fetch(`${BASE}/events/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to update event')
+  return res.json()
+}
+
+export async function deleteEvent(id) {
+  const res = await fetch(`${BASE}/events/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete event')
+}
+
+// Products
+export async function fetchCategories() {
+  const res = await fetch(`${BASE}/products/categories`)
+  if (!res.ok) throw new Error('Failed to fetch categories')
+  return res.json()
+}
+
 export async function fetchProducts() {
   const res = await fetch(`${BASE}/products`)
   if (!res.ok) throw new Error('Failed to fetch products')
@@ -31,17 +70,19 @@ export async function deleteProduct(id) {
   if (!res.ok) throw new Error('Failed to delete product')
 }
 
-export async function fetchSales() {
-  const res = await fetch(`${BASE}/sales`)
+// Sales
+export async function fetchSales(eventId) {
+  const url = eventId ? `${BASE}/sales?eventId=${eventId}` : `${BASE}/sales`
+  const res = await fetch(url)
   if (!res.ok) throw new Error('Failed to fetch sales')
   return res.json()
 }
 
-export async function recordSale(productId, quantity) {
+export async function recordSale(productId, quantity, eventId) {
   const res = await fetch(`${BASE}/sales`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ productId, quantity })
+    body: JSON.stringify({ productId, quantity, eventId: eventId || null })
   })
   if (!res.ok) {
     const msg = await res.text()
@@ -50,8 +91,9 @@ export async function recordSale(productId, quantity) {
   return res.json()
 }
 
-export async function fetchSummary() {
-  const res = await fetch(`${BASE}/sales/summary`)
+export async function fetchSummary(eventId) {
+  const url = eventId ? `${BASE}/sales/summary?eventId=${eventId}` : `${BASE}/sales/summary`
+  const res = await fetch(url)
   if (!res.ok) throw new Error('Failed to fetch summary')
   return res.json()
 }

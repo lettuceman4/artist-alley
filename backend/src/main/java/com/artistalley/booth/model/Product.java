@@ -16,6 +16,9 @@ public class Product {
     @NotBlank
     private String name;
 
+    @Column(unique = true)
+    private String productCode;
+
     private String category;
 
     @Min(0)
@@ -38,4 +41,6 @@ public class Product {
     public void setPrice(BigDecimal price) { this.price = price; }
     public String getImageUrl() { return imageUrl; }
     public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
+    public String getProductCode() { return productCode; }
+    public void setProductCode(String productCode) { this.productCode = productCode; }
 }

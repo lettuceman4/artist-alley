@@ -23,8 +23,19 @@ public class ProductController {
         return repo.findAll();
     }
 
+    @GetMapping("/categories")
+    public List<String> getCategories() {
+        return repo.findDistinctCategories();
+    }
+
     @PostMapping
     public Product create(@Valid @RequestBody Product product) {
+        String prefix = product.getProductCode();
+        if (prefix != null && !prefix.isBlank()) {
+            prefix = prefix.trim().toUpperCase();
+            long count = repo.countByProductCodePrefix(prefix);
+            product.setProductCode(prefix + (count + 1));
+        }
         return repo.save(product);
     }
 

@@ -16,6 +16,10 @@ public class Sale {
     @JoinColumn(name = "product_id")
     private Product product;
 
+    @ManyToOne
+    @JoinColumn(name = "event_id")
+    private com.artistalley.booth.model.Event event;
+
     private int quantity;
 
     @Column(precision = 10, scale = 2)
@@ -33,4 +37,6 @@ public class Sale {
     public void setTotalPrice(BigDecimal totalPrice) { this.totalPrice = totalPrice; }
     public LocalDateTime getSoldAt() { return soldAt; }
     public void setSoldAt(LocalDateTime soldAt) { this.soldAt = soldAt; }
+    public com.artistalley.booth.model.Event getEvent() { return event; }
+    public void setEvent(com.artistalley.booth.model.Event event) { this.event = event; }
 }

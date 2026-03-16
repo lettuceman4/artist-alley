@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { fetchProducts, fetchSales, recordSale } from '../api'
+import { useEvent } from '../EventContext'
 
 export default function Sales() {
+  const { activeEventId, events } = useEvent()
   const [products, setProducts] = useState([])
   const [sales, setSales] = useState([])
   const [productId, setProductId] = useState('')
@@ -10,16 +12,16 @@ export default function Sales() {
 
   const load = () => {
     fetchProducts().then(setProducts).catch(console.error)
-    fetchSales().then(setSales).catch(console.error)
+    fetchSales(activeEventId).then(setSales).catch(console.error)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [activeEventId])
 
   const handleSale = async (e) => {
     e.preventDefault()
     setError('')
     try {
-      await recordSale(Number(productId), Number(quantity))
+      await recordSale(Number(productId), Number(quantity), activeEventId)
       setProductId('')
       setQuantity(1)
       load()
@@ -28,9 +30,21 @@ export default function Sales() {
     }
   }
 
+  const activeEvent = events.find(e => e.id === activeEventId)
+
   return (
     <>
       <h1>Sales</h1>
+      {activeEvent && (
+        <p style={{ color: '#888', marginTop: '-0.5rem', marginBottom: '1rem' }}>
+          Recording sales for: <strong>{activeEvent.name}</strong>
+        </p>
+      )}
+      {!activeEventId && (
+        <p style={{ color: '#f0a500', marginTop: '-0.5rem', marginBottom: '1rem' }}>
+          ⚠️ No event selected — sales will not be linked to any event.
+        </p>
+      )}
       <div className="card">
         <h2>Record a Sale</h2>
         <form onSubmit={handleSale}>
@@ -41,7 +55,7 @@ export default function Sales() {
                 <option value="">Select product...</option>
                 {products.filter(p => p.stock > 0).map(p => (
                   <option key={p.id} value={p.id}>
-                    {p.name} — ${Number(p.price).toFixed(2)} ({p.stock} in stock)
+                    {p.productCode ? `[${p.productCode}] ` : ''}{p.name} — ${Number(p.price).toFixed(2)} ({p.stock} in stock)
                   </option>
                 ))}
               </select>
@@ -57,7 +71,7 @@ export default function Sales() {
       </div>
 
       <div className="card">
-        <h2>Sale History</h2>
+        <h2>Sale History {activeEvent ? `— ${activeEvent.name}` : '(All Events)'}</h2>
         {sales.length === 0 ? (
           <p style={{ color: '#888' }}>No sales recorded yet.</p>
         ) : (
