@@ -7,5 +7,13 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:8080'
     }
+  },
+  optimizeDeps: {
+    include: ['xlsx']
+  },
+  build: {
+    commonjsOptions: {
+      include: [/xlsx/, /node_modules/]
+    }
   }
 })

@@ -1,4 +1,6 @@
 import { useReducer, useEffect, useState, useRef } from 'react'
+import { fetchBoothLayouts, saveBoothLayout, deleteBoothLayout } from '../api'
+import { useEvent } from '../EventContext'
 
 // ─── Task 1.1: Fixture type definitions ───────────────────────────────────────
 
@@ -709,12 +711,19 @@ export function FixturePalette({ fixtureTypes, onDragStart }) {
 
 const LS_KEY = 'booth-visualiser-layout'
 
-export default function BoothVisualiser() {
+function BoothVisualiser() {
   const [state, dispatch] = useReducer(layoutReducer, DEFAULT_STATE)
   const [selectedId, setSelectedId] = useState(null)
   const [dragState, setDragState] = useState(null)
+  const { activeEventId } = useEvent()
 
-  // On mount: restore from localStorage
+  const [savedLayouts, setSavedLayouts] = useState([])
+  const [saveName, setSaveName] = useState('')
+  const [saveStatus, setSaveStatus] = useState('')
+
+  const loadLayouts = () =>
+    fetchBoothLayouts(activeEventId).then(setSavedLayouts).catch(console.error)
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_KEY)
@@ -731,58 +740,45 @@ export default function BoothVisualiser() {
     }
   }, [])
 
-  // On state change: persist to localStorage
+  useEffect(() => { loadLayouts() }, [activeEventId])
+
   useEffect(() => {
     try {
       localStorage.setItem(LS_KEY, JSON.stringify(state))
-    } catch {
-      // silently swallow storage errors
-    }
+    } catch { /* ignore */ }
   }, [state])
 
   function handleTableChange(field, value) {
     dispatch({ type: ACTION_TYPES.SET_TABLE_DIM, field, value })
   }
-
   function handleUnitChange(unit) {
     dispatch({ type: ACTION_TYPES.SET_UNIT, unit })
   }
-
   function handleViewChange(view) {
     dispatch({ type: ACTION_TYPES.SET_VIEW, view })
   }
-
   function handleFixtureDrop(type, x, y) {
     const id = crypto.randomUUID?.() ?? String(Date.now())
     const typeDef = FIXTURE_TYPES.find(t => t.type === type)
     if (!typeDef) return
-    dispatch({
-      type: ACTION_TYPES.ADD_FIXTURE,
-      fixture: { id, type, x, y, width: typeDef.defaultWidth, height: typeDef.defaultHeight },
-    })
+    dispatch({ type: ACTION_TYPES.ADD_FIXTURE, fixture: { id, type, x, y, width: typeDef.defaultWidth, height: typeDef.defaultHeight } })
   }
-
   function handleFixtureMove(id, x, y) {
     dispatch({ type: ACTION_TYPES.MOVE_FIXTURE, id, x, y })
   }
-
   function handleFixtureResize(id, width, height) {
     dispatch({ type: ACTION_TYPES.RESIZE_FIXTURE, id, width, height })
   }
-
   function handleFixtureDelete(id) {
     dispatch({ type: ACTION_TYPES.DELETE_FIXTURE, id })
     setSelectedId(null)
   }
-
   function handleFixtureSelect(id) {
     setSelectedId(id)
   }
-
   function handleDragStart(type) {
     setDragState({ type, source: 'palette' })
   }
-
   function handleClearLayout() {
     dispatch({ type: ACTION_TYPES.CLEAR_LAYOUT })
     localStorage.removeItem(LS_KEY)
@@ -790,29 +786,83 @@ export default function BoothVisualiser() {
     setDragState(null)
   }
 
+  async function handleSave() {
+    if (!saveName.trim()) { setSaveStatus('Enter a name first.'); return }
+    setSaveStatus('')
+    try {
+      await saveBoothLayout(saveName.trim(), JSON.stringify(state), activeEventId)
+      setSaveName('')
+      setSaveStatus('✓ Saved')
+      loadLayouts()
+      setTimeout(() => setSaveStatus(''), 2000)
+    } catch (e) {
+      setSaveStatus('✗ ' + e.message)
+    }
+  }
+
+  function handleLoadLayout(layout) {
+    try {
+      const parsed = JSON.parse(layout.layoutJson)
+      if (isValidLayout(parsed)) {
+        dispatch({ type: ACTION_TYPES.LOAD_LAYOUT, layout: parsed })
+        setSelectedId(null)
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function handleDeleteLayout(id) {
+    await deleteBoothLayout(id)
+    loadLayouts()
+  }
+
   return (
     <div id="booth-visualiser" style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px' }}>
-      <DimensionPanel
-        table={state.table}
-        onTableChange={handleTableChange}
-        onUnitChange={handleUnitChange}
-      />
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      <DimensionPanel table={state.table} onTableChange={handleTableChange} onUnitChange={handleUnitChange} />
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
         <ViewToggle view={state.view} onChange={handleViewChange} />
-        <button
-          onClick={handleClearLayout}
-          style={{
-            border: '1px solid #e74c3c',
-            color: '#e74c3c',
-            background: '#fff',
-            padding: '6px 14px',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <input
+            value={saveName}
+            onChange={e => setSaveName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSave()}
+            placeholder="Layout name…"
+            style={{ padding: '5px 8px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px', width: '150px' }}
+          />
+          <button onClick={handleSave} style={{ border: '1px solid #6c3fc5', color: '#6c3fc5', background: '#fff', padding: '5px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}>
+            💾 Save
+          </button>
+          {saveStatus && <span style={{ fontSize: '12px', color: saveStatus.startsWith('✓') ? '#27ae60' : '#e74c3c' }}>{saveStatus}</span>}
+        </div>
+        <button onClick={handleClearLayout} style={{ border: '1px solid #e74c3c', color: '#e74c3c', background: '#fff', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
           Clear Layout
         </button>
       </div>
+
+      {savedLayouts.length > 0 && (
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', padding: '6px 0', borderBottom: '1px solid #eee', alignItems: 'center' }}>
+          <span style={{ fontSize: '12px', color: '#888' }}>Saved:</span>
+          {savedLayouts.map(l => (
+            <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: '3px', background: '#f5f0ff', borderRadius: '4px', padding: '3px 8px', fontSize: '13px' }}>
+              <button
+                onClick={() => handleLoadLayout(l)}
+                title={`Saved: ${new Date(l.savedAt).toLocaleString()}`}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6c3fc5', fontWeight: '600', padding: 0 }}
+              >
+                {l.name}
+              </button>
+              <button
+                onClick={() => handleDeleteLayout(l.id)}
+                title="Delete"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e74c3c', fontSize: '11px', padding: '0 2px' }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: '16px' }}>
         <div style={{ flex: 1 }}>
           <BoothCanvas
@@ -829,11 +879,9 @@ export default function BoothVisualiser() {
             onDragStateChange={setDragState}
           />
         </div>
-        <FixturePalette
-          fixtureTypes={FIXTURE_TYPES}
-          onDragStart={handleDragStart}
-        />
+        <FixturePalette fixtureTypes={FIXTURE_TYPES} onDragStart={handleDragStart} />
       </div>
     </div>
   )
 }
+export default BoothVisualiser

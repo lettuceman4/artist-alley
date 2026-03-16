@@ -1,135 +1,298 @@
 import { useEffect, useState } from 'react'
-import { fetchProducts, createProduct, updateProduct, deleteProduct, fetchCategories } from '../api'
+import { utils as xlsxUtils, writeFile as xlsxWriteFile } from 'xlsx'
+import { fetchProducts, createProduct, createBulkProducts, updateProduct, deleteProduct, fetchCategories, importProductsExcel } from '../api'
 
-const empty = { name: '', category: '', stock: '', price: '', imageUrl: '', productCode: '', supplier: '', printingCost: '' }
+const emptyRow = () => ({ name: '', stock: '', price: '', productCode: '' })
+const emptySingle = { name: '', category: '', stock: '', price: '', imageUrl: '', productCode: '', supplier: '', printingCost: '' }
+
+// ── Category selector (shared between single + bulk) ──────────────────────────
+function CategoryField({ value, onChange, categories }) {
+  const [custom, setCustom] = useState(false)
+
+  useEffect(() => {
+    if (value && !categories.includes(value)) setCustom(true)
+    else setCustom(false)
+  }, [categories])
+
+  if (custom) return (
+    <div style={{ display: 'flex', gap: '0.25rem' }}>
+      <input autoFocus value={value} onChange={e => onChange(e.target.value)} placeholder="New category name" />
+      <button type="button" onClick={() => { setCustom(false); onChange('') }} title="Back to list">✕</button>
+    </div>
+  )
+
+  return (
+    <select value={value} onChange={e => {
+      if (e.target.value === '__new__') { setCustom(true); onChange('') }
+      else onChange(e.target.value)
+    }}>
+      <option value="">— None —</option>
+      {categories.map(c => <option key={c} value={c}>{c}</option>)}
+      <option value="__new__">+ Add new category…</option>
+    </select>
+  )
+}
+
+function downloadSample() {
+  const ws = xlsxUtils.aoa_to_sheet([
+    ['name', 'category', 'supplier', 'price', 'stock', 'printingCost', 'codePrefix'],
+    ['Genshin Impact Sticker Pack', 'Stickers', 'Printify', 5.00, 30, 1.20, 'GI'],
+    ['Anime Keychain Set', 'Keychains', 'Printify', 8.50, 20, 2.50, 'AK'],
+    ['Art Print A4', 'Prints', 'Local Print', 12.00, 15, 3.00, 'AP'],
+    ['Enamel Pin Badge', 'Pins', 'PinMart', 7.00, 25, 1.80, 'EP'],
+    ['Washi Tape Roll', 'Stationery', 'Washi Co', 4.50, 40, 0.90, 'WT'],
+  ])
+  ws['!cols'] = [20, 16, 14, 8, 8, 14, 12].map(w => ({ wch: w }))
+  const wb = xlsxUtils.book_new()
+  xlsxUtils.book_append_sheet(wb, ws, 'Products')
+  xlsxWriteFile(wb, 'sample_inventory.xlsx')
+}
+
+function ImportSection({ onImported }) {
+  const [status, setStatus] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleFile = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setLoading(true)
+    setStatus('')
+    try {
+      const result = await importProductsExcel(file)
+      setStatus(`✓ Imported ${result.length} product${result.length !== 1 ? 's' : ''} successfully.`)
+      onImported()
+    } catch (err) {
+      setStatus(`✗ ${err.message}`)
+    } finally {
+      setLoading(false)
+      e.target.value = ''
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2>Import from Excel</h2>
+      <p style={{ color: '#888', fontSize: '0.875rem', margin: '0 0 0.75rem' }}>
+        Upload a <code>.xlsx</code> file with columns: <code>name, category, supplier, price, stock, printingCost, codePrefix</code>
+      </p>
+      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <label className="btn-primary" style={{ cursor: 'pointer', padding: '6px 14px', borderRadius: '4px', fontSize: '0.9rem' }}>
+          {loading ? 'Importing…' : '📂 Choose .xlsx file'}
+          <input type="file" accept=".xlsx" onChange={handleFile} style={{ display: 'none' }} disabled={loading} />
+        </label>
+        <button onClick={downloadSample} style={{ cursor: 'pointer', padding: '6px 14px', borderRadius: '4px', border: '1px solid #6c3fc5', color: '#6c3fc5', background: '#fff', fontSize: '0.9rem' }}>
+          ⬇ Download sample
+        </button>
+      </div>
+      {status && <p style={{ marginTop: '0.5rem', color: status.startsWith('✓') ? '#27ae60' : '#e74c3c', fontSize: '0.875rem' }}>{status}</p>}
+    </div>
+  )
+}
 
 export default function Inventory() {
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
-  const [form, setForm] = useState(empty)
   const [editId, setEditId] = useState(null)
   const [error, setError] = useState('')
-  const [customCategory, setCustomCategory] = useState(false)
+  const [bulkMode, setBulkMode] = useState(false)
+
+  // single form
+  const [form, setForm] = useState(emptySingle)
+
+  // bulk form — shared fields + rows
+  const [shared, setShared] = useState({ category: '', supplier: '', printingCost: '', productCode: '' })
+  const [rows, setRows] = useState([emptyRow(), emptyRow()])
 
   const load = () => fetchProducts().then(setProducts).catch(console.error)
   const loadCategories = () => fetchCategories().then(setCategories).catch(console.error)
-
   useEffect(() => { load(); loadCategories() }, [])
 
-  const handleSubmit = async (e) => {
+  // ── Single submit ────────────────────────────────────────────────────────────
+  const handleSingleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     try {
       const data = { ...form, stock: Number(form.stock), price: Number(form.price), printingCost: form.printingCost !== '' ? Number(form.printingCost) : null }
-      if (editId) {
-        await updateProduct(editId, data)
-      } else {
-        await createProduct(data)
-      }
-      setForm(empty)
+      if (editId) await updateProduct(editId, data)
+      else await createProduct(data)
+      setForm(emptySingle)
       setEditId(null)
-      setCustomCategory(false)
-      load()
-      loadCategories()
-    } catch (err) {
-      setError(err.message)
-    }
+      load(); loadCategories()
+    } catch (err) { setError(err.message) }
+  }
+
+  // ── Bulk submit ──────────────────────────────────────────────────────────────
+  const handleBulkSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    const filled = rows.filter(r => r.name.trim())
+    if (!filled.length) { setError('Add at least one product name.'); return }
+    try {
+      const payload = filled.map(r => ({
+        name: r.name.trim(),
+        stock: Number(r.stock) || 0,
+        price: Number(r.price) || 0,
+        productCode: (r.productCode || shared.productCode).toUpperCase() || null,
+        category: shared.category || null,
+        supplier: shared.supplier || null,
+        printingCost: shared.printingCost !== '' ? Number(shared.printingCost) : null,
+      }))
+      await createBulkProducts(payload)
+      setRows([emptyRow(), emptyRow()])
+      setShared({ category: '', supplier: '', printingCost: '', productCode: '' })
+      load(); loadCategories()
+    } catch (err) { setError(err.message) }
   }
 
   const startEdit = (p) => {
+    setBulkMode(false)
     setEditId(p.id)
     const cat = p.category || ''
-    setCustomCategory(cat !== '' && !categories.includes(cat))
     setForm({ name: p.name, category: cat, stock: p.stock, price: p.price, imageUrl: p.imageUrl || '', productCode: p.productCode || '', supplier: p.supplier || '', printingCost: p.printingCost ?? '' })
   }
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this product?')) return
     await deleteProduct(id)
-    load()
-    loadCategories()
+    load(); loadCategories()
   }
 
-  const handleCategorySelect = (e) => {
-    const val = e.target.value
-    if (val === '__new__') {
-      setCustomCategory(true)
-      setForm({ ...form, category: '' })
-    } else {
-      setCustomCategory(false)
-      setForm({ ...form, category: val })
-    }
-  }
+  const updateRow = (i, field, val) => setRows(rows.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
+  const addRow = () => setRows([...rows, emptyRow()])
+  const removeRow = (i) => setRows(rows.filter((_, idx) => idx !== i))
 
   return (
     <>
       <h1>Inventory</h1>
       <div className="card">
-        <h2>{editId ? 'Edit Product' : 'Add Product'}</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="form-row">
-            <div>
-              <label>Name *</label>
-              <input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Sticker Pack" />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+          <h2 style={{ margin: 0 }}>{editId ? 'Edit Product' : bulkMode ? 'Bulk Add Products' : 'Add Product'}</h2>
+          {!editId && (
+            <button type="button" onClick={() => { setBulkMode(!bulkMode); setError('') }}
+              style={{ fontSize: '0.85rem', padding: '4px 10px', cursor: 'pointer' }}>
+              {bulkMode ? '← Single add' : '+ Bulk add'}
+            </button>
+          )}
+        </div>
+
+        {/* ── Single / Edit form ── */}
+        {(!bulkMode || editId) && (
+          <form onSubmit={handleSingleSubmit}>
+            <div className="form-row">
+              <div>
+                <label>Name *</label>
+                <input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Sticker Pack" />
+              </div>
+              <div>
+                <label>Code Prefix {editId ? '' : '(e.g. GI)'}</label>
+                <input value={form.productCode} onChange={e => setForm({ ...form, productCode: e.target.value.toUpperCase() })}
+                  placeholder="e.g. GI" maxLength={10} disabled={!!editId}
+                  title={editId ? 'Product code cannot be changed after creation' : ''} />
+                {!editId && form.productCode && (
+                  <small style={{ color: '#888' }}>e.g. {form.productCode}1, {form.productCode}2…</small>
+                )}
+              </div>
+              <div>
+                <label>Category</label>
+                <CategoryField value={form.category} onChange={v => setForm({ ...form, category: v })} categories={categories} />
+              </div>
+              <div>
+                <label>Stock *</label>
+                <input required type="number" min="0" value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} />
+              </div>
+              <div>
+                <label>Price ($) *</label>
+                <input required type="number" min="0" step="0.01" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} />
+              </div>
+              <div>
+                <label>Supplier</label>
+                <input value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })} placeholder="e.g. Printify" />
+              </div>
+              <div>
+                <label>Printing Cost ($)</label>
+                <input type="number" min="0" step="0.01" value={form.printingCost} onChange={e => setForm({ ...form, printingCost: e.target.value })} placeholder="0.00" />
+              </div>
             </div>
-            <div>
-              <label>Code Prefix {editId ? '' : '(e.g. GI)'}</label>
-              <input
-                value={form.productCode}
-                onChange={e => setForm({ ...form, productCode: e.target.value.toUpperCase() })}
-                placeholder="e.g. GI"
-                maxLength={10}
-                disabled={!!editId}
-                title={editId ? 'Product code cannot be changed after creation' : ''}
-              />
-              {!editId && form.productCode && (
-                <small style={{ color: '#888' }}>Will be assigned e.g. {form.productCode.toUpperCase()}1, {form.productCode.toUpperCase()}2…</small>
-              )}
+            {error && <div className="error">{error}</div>}
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <button type="submit" className="btn-primary">{editId ? 'Update' : 'Add Product'}</button>
+              {editId && <button type="button" onClick={() => { setEditId(null); setForm(emptySingle) }}>Cancel</button>}
             </div>
-            <div>
-              <label>Category</label>
-              {customCategory ? (
-                <div style={{ display: 'flex', gap: '0.25rem' }}>
-                  <input
-                    autoFocus
-                    value={form.category}
-                    onChange={e => setForm({ ...form, category: e.target.value })}
-                    placeholder="New category name"
-                  />
-                  <button type="button" onClick={() => { setCustomCategory(false); setForm({ ...form, category: '' }) }} title="Back to list">✕</button>
-                </div>
-              ) : (
-                <select value={form.category} onChange={handleCategorySelect}>
-                  <option value="">— None —</option>
-                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                  <option value="__new__">+ Add new category…</option>
-                </select>
-              )}
+          </form>
+        )}
+
+        {/* ── Bulk add form ── */}
+        {bulkMode && !editId && (
+          <form onSubmit={handleBulkSubmit}>
+            {/* Shared fields */}
+            <div className="form-row" style={{ marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid #eee' }}>
+              <div>
+                <label>Category (shared)</label>
+                <CategoryField value={shared.category} onChange={v => setShared({ ...shared, category: v })} categories={categories} />
+              </div>
+              <div>
+                <label>Supplier (shared)</label>
+                <input value={shared.supplier} onChange={e => setShared({ ...shared, supplier: e.target.value })} placeholder="e.g. Printify" />
+              </div>
+              <div>
+                <label>Printing Cost $ (shared)</label>
+                <input type="number" min="0" step="0.01" value={shared.printingCost} onChange={e => setShared({ ...shared, printingCost: e.target.value })} placeholder="0.00" />
+              </div>
+              <div>
+                <label>Code Prefix (shared)</label>
+                <input value={shared.productCode} onChange={e => setShared({ ...shared, productCode: e.target.value.toUpperCase() })} placeholder="e.g. GI" maxLength={10} />
+                {shared.productCode && <small style={{ color: '#888' }}>e.g. {shared.productCode}1, {shared.productCode}2…</small>}
+              </div>
             </div>
-            <div>
-              <label>Stock *</label>
-              <input required type="number" min="0" value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} />
+
+            {/* Per-product rows */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0.5rem' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '4px 6px' }}>Name *</th>
+                  <th style={{ textAlign: 'left', padding: '4px 6px' }}>Stock</th>
+                  <th style={{ textAlign: 'left', padding: '4px 6px' }}>Price ($)</th>
+                  <th style={{ textAlign: 'left', padding: '4px 6px' }}>Code Prefix override</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: '3px 6px' }}>
+                      <input value={row.name} onChange={e => updateRow(i, 'name', e.target.value)} placeholder="Product name" style={{ width: '100%' }} />
+                    </td>
+                    <td style={{ padding: '3px 6px' }}>
+                      <input type="number" min="0" value={row.stock} onChange={e => updateRow(i, 'stock', e.target.value)} style={{ width: '70px' }} />
+                    </td>
+                    <td style={{ padding: '3px 6px' }}>
+                      <input type="number" min="0" step="0.01" value={row.price} onChange={e => updateRow(i, 'price', e.target.value)} style={{ width: '80px' }} />
+                    </td>
+                    <td style={{ padding: '3px 6px' }}>
+                      <input value={row.productCode} onChange={e => updateRow(i, 'productCode', e.target.value.toUpperCase())}
+                        placeholder={shared.productCode || '—'} maxLength={10} style={{ width: '80px' }} />
+                    </td>
+                    <td style={{ padding: '3px 6px' }}>
+                      {rows.length > 1 && (
+                        <button type="button" onClick={() => removeRow(i)} className="btn-danger btn-sm">✕</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <button type="button" onClick={addRow} style={{ fontSize: '0.85rem', marginBottom: '0.75rem', cursor: 'pointer' }}>+ Add row</button>
+
+            {error && <div className="error">{error}</div>}
+            <div style={{ marginTop: '0.5rem' }}>
+              <button type="submit" className="btn-primary">Add {rows.filter(r => r.name.trim()).length || ''} Products</button>
             </div>
-            <div>
-              <label>Price ($) *</label>
-              <input required type="number" min="0" step="0.01" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} />
-            </div>
-            <div>
-              <label>Supplier</label>
-              <input value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })} placeholder="e.g. Printify" />
-            </div>
-            <div>
-              <label>Printing Cost ($)</label>
-              <input type="number" min="0" step="0.01" value={form.printingCost} onChange={e => setForm({ ...form, printingCost: e.target.value })} placeholder="0.00" />
-            </div>
-          </div>
-          {error && <div className="error">{error}</div>}
-          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-            <button type="submit" className="btn-primary">{editId ? 'Update' : 'Add Product'}</button>
-            {editId && <button type="button" onClick={() => { setEditId(null); setForm(empty); setCustomCategory(false) }}>Cancel</button>}
-          </div>
-        </form>
+          </form>
+        )}
       </div>
+
+      <ImportSection onImported={() => { load(); loadCategories() }} />
 
       <div className="card">
         <h2>Products ({products.length})</h2>
@@ -149,9 +312,7 @@ export default function Inventory() {
                   <td>{p.supplier || '—'}</td>
                   <td>{p.printingCost != null ? `$${Number(p.printingCost).toFixed(2)}` : '—'}</td>
                   <td>${Number(p.price).toFixed(2)}</td>
-                  <td>
-                    <span className={`badge ${p.stock <= 3 ? 'badge-low' : 'badge-ok'}`}>{p.stock}</span>
-                  </td>
+                  <td><span className={`badge ${p.stock <= 3 ? 'badge-low' : 'badge-ok'}`}>{p.stock}</span></td>
                   <td>
                     <div className="actions">
                       <button className="btn-primary btn-sm" onClick={() => startEdit(p)}>Edit</button>

@@ -1,5 +1,28 @@
 const BASE = '/api'
 
+// Booth Layouts
+export async function fetchBoothLayouts(eventId) {
+  const url = eventId ? `${BASE}/booth-layouts?eventId=${eventId}` : `${BASE}/booth-layouts`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error('Failed to fetch layouts')
+  return res.json()
+}
+
+export async function saveBoothLayout(name, layoutJson, eventId) {
+  const res = await fetch(`${BASE}/booth-layouts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, layoutJson, eventId: eventId || null })
+  })
+  if (!res.ok) throw new Error('Failed to save layout')
+  return res.json()
+}
+
+export async function deleteBoothLayout(id) {
+  const res = await fetch(`${BASE}/booth-layouts/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete layout')
+}
+
 // Events
 export async function fetchEvents() {
   const res = await fetch(`${BASE}/events`)
@@ -42,6 +65,27 @@ export async function fetchCategories() {
 export async function fetchProducts() {
   const res = await fetch(`${BASE}/products`)
   if (!res.ok) throw new Error('Failed to fetch products')
+  return res.json()
+}
+
+export async function importProductsExcel(file) {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`${BASE}/products/import`, { method: 'POST', body: form })
+  if (!res.ok) {
+    const msg = await res.text()
+    throw new Error(msg || 'Failed to import file')
+  }
+  return res.json()
+}
+
+export async function createBulkProducts(data) {
+  const res = await fetch(`${BASE}/products/bulk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to create products')
   return res.json()
 }
 
