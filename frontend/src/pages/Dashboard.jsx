@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchSummary, fetchProducts } from '../api'
 import { useEvent } from '../EventContext'
+import './Dashboard.css'
 
 export default function Dashboard() {
   const { activeEventId, events } = useEvent()
@@ -18,11 +19,11 @@ export default function Dashboard() {
     <>
       <h1>Dashboard</h1>
       {activeEvent && (
-        <p style={{ color: '#888', marginTop: '-0.5rem', marginBottom: '1rem' }}>
+        <p className="dashboard-subtitle">
           Showing stats for: <strong>{activeEvent.name}</strong>{activeEvent.eventDate ? ` · ${activeEvent.eventDate}` : ''}
         </p>
       )}
-      {!activeEventId && <p style={{ color: '#888', marginTop: '-0.5rem', marginBottom: '1rem' }}>Showing stats across all events</p>}
+      {!activeEventId && <p className="dashboard-subtitle">Showing stats across all events</p>}
       <div className="stat-grid">
         <div className="stat-card">
           <div className="label">Total Revenue</div>

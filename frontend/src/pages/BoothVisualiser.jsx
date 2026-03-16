@@ -1,6 +1,7 @@
 import { useReducer, useEffect, useState, useRef } from 'react'
 import { fetchBoothLayouts, saveBoothLayout, deleteBoothLayout } from '../api'
 import { useEvent } from '../EventContext'
+import './BoothVisualiser.css'
 
 // ── Shape definitions ─────────────────────────────────────────────────────────
 export const BASIC_SHAPES = [
@@ -73,22 +74,20 @@ export function DimensionPanel({ table, onTableChange, onUnitChange }) {
     if (!raw || isNaN(v) || v <= 0) setErrs(e => ({ ...e, [field]: 'Must be > 0' }))
     else { setErrs(e => { const n = { ...e }; delete n[field]; return n }); onTableChange(field, v) }
   }
-  const inp = { width: '80px', padding: '4px 6px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '14px' }
-  const unitBtn = (active) => ({ padding: '4px 12px', border: '1px solid #6c3fc5', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', background: active ? '#6c3fc5' : '#fff', color: active ? '#fff' : '#6c3fc5', fontWeight: active ? '600' : '400' })
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', padding: '12px 0' }}>
+    <div className="dim-panel">
       {['width', 'depth', 'height'].map(f => (
-        <div key={f} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <label style={{ fontSize: '13px', fontWeight: '500' }}>{f.charAt(0).toUpperCase() + f.slice(1)} ({table.unit})</label>
-          <input type="number" value={table[f]} onChange={e => handleChange(f, e.target.value)} style={inp} />
-          {errs[f] && <span style={{ color: '#c0392b', fontSize: '12px' }}>{errs[f]}</span>}
+        <div key={f} className="dim-field">
+          <label>{f.charAt(0).toUpperCase() + f.slice(1)} ({table.unit})</label>
+          <input type="number" value={table[f]} onChange={e => handleChange(f, e.target.value)} />
+          {errs[f] && <span className="dim-error">{errs[f]}</span>}
         </div>
       ))}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        <span style={{ fontSize: '13px', fontWeight: '500' }}>Unit</span>
-        <div style={{ display: 'flex', gap: '4px' }}>
-          <button style={unitBtn(table.unit === 'cm')} onClick={() => onUnitChange('cm')}>cm</button>
-          <button style={unitBtn(table.unit === 'in')} onClick={() => onUnitChange('in')}>in</button>
+      <div className="dim-unit-group">
+        <span>Unit</span>
+        <div className="dim-unit-btns">
+          <button className={`dim-unit-btn${table.unit === 'cm' ? ' active' : ''}`} onClick={() => onUnitChange('cm')}>cm</button>
+          <button className={`dim-unit-btn${table.unit === 'in' ? ' active' : ''}`} onClick={() => onUnitChange('in')}>in</button>
         </div>
       </div>
     </div>
@@ -97,11 +96,10 @@ export function DimensionPanel({ table, onTableChange, onUnitChange }) {
 
 // ── ViewToggle ────────────────────────────────────────────────────────────────
 export function ViewToggle({ view, onChange }) {
-  const btn = (active) => ({ padding: '6px 16px', border: '1px solid #6c3fc5', cursor: 'pointer', fontSize: '14px', fontWeight: active ? '600' : '400', background: active ? '#6c3fc5' : '#fff', color: active ? '#fff' : '#6c3fc5' })
   return (
-    <div style={{ display: 'inline-flex' }}>
-      <button style={{ ...btn(view === 'top'), borderRadius: '4px 0 0 4px', borderRight: 'none' }} onClick={() => onChange('top')}>Top View</button>
-      <button style={{ ...btn(view === 'front'), borderRadius: '0 4px 4px 0' }} onClick={() => onChange('front')}>Front View</button>
+    <div className="view-toggle">
+      <button className={`view-toggle-btn${view === 'top' ? ' active' : ''}`} onClick={() => onChange('top')}>Top View</button>
+      <button className={`view-toggle-btn${view === 'front' ? ' active' : ''}`} onClick={() => onChange('front')}>Front View</button>
     </div>
   )
 }
@@ -221,7 +219,7 @@ export function BoothCanvas({ table, view, fixtures, selectedId, onFixtureDrop, 
   }
 
   return (
-    <div ref={wrapperRef} style={{ width: '100%', minHeight: '800px', height: '800px', border: '1px solid #ddd', borderRadius: '6px', overflow: 'hidden', background: '#f8f8f8' }}>
+    <div ref={wrapperRef} className="booth-canvas-container">
       <svg ref={svgRef} width="100%" height="100%" viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`} onPointerDown={handleSvgPointerDown} onPointerMove={handleSvgPointerMove} onPointerUp={handleSvgPointerUp} style={{ cursor: dragState ? 'grabbing' : 'default' }}>
         <rect x={0} y={0} width={canvasSize.width} height={canvasSize.height} fill="#f8f8f8" stroke="#ccc" strokeWidth={1.5} strokeDasharray="6 3" />
         <text x={8} y={16} fontSize={10} fill="#bbb" style={{ pointerEvents: 'none', userSelect: 'none' }}>Workable area</text>
@@ -243,31 +241,31 @@ export function FixturePalette({ onDragStart }) {
   const [customShape, setCustomShape] = useState('rect')
   const ICONS = { rect: '▬', circle: '●', triangle: '▲', line: '━' }
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '12px', minWidth: '145px' }}>
-      <div style={{ fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>Basic Shapes</div>
+    <div className="palette">
+      <div className="palette-section-label">Basic Shapes</div>
       {BASIC_SHAPES.map(s => (
         <div key={s.type} onPointerDown={() => onDragStart(s.type, s.label, s.color)}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 10px', borderRadius: '6px', background: s.color, color: '#fff', fontWeight: '600', fontSize: '13px', cursor: 'grab', userSelect: 'none' }}>
-          <span style={{ fontSize: '15px' }}>{ICONS[s.type]}</span>{s.label}
+          className="palette-shape-item" style={{ background: s.color }}>
+          <span className="palette-shape-icon">{ICONS[s.type]}</span>{s.label}
         </div>
       ))}
-      <div style={{ fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '8px', marginBottom: '2px' }}>Custom Shape</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', padding: '8px', background: '#f5f5f5', borderRadius: '6px' }}>
-        <input value={customLabel} onChange={e => setCustomLabel(e.target.value)} placeholder="Label (optional)" style={{ padding: '4px 7px', borderRadius: '4px', border: '1px solid #ddd', fontSize: '12px' }} />
-        <div style={{ display: 'flex', gap: '4px' }}>
+      <div className="palette-section-label mt">Custom Shape</div>
+      <div className="custom-builder">
+        <input type="text" value={customLabel} onChange={e => setCustomLabel(e.target.value)} placeholder="Label (optional)" />
+        <div className="custom-builder-shapes">
           {['rect', 'circle', 'triangle'].map(s => (
             <button key={s} onClick={() => setCustomShape(s)} title={s}
-              style={{ flex: 1, padding: '3px', borderRadius: '4px', cursor: 'pointer', fontSize: '14px', border: customShape === s ? '2px solid #6c3fc5' : '1px solid #ddd', background: customShape === s ? '#ede7ff' : '#fff' }}>
+              className={`custom-shape-btn${customShape === s ? ' active' : ''}`}>
               {ICONS[s]}
             </button>
           ))}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <label style={{ fontSize: '11px', color: '#666' }}>Color</label>
-          <input type="color" value={customColor} onChange={e => setCustomColor(e.target.value)} style={{ width: '36px', height: '24px', border: 'none', cursor: 'pointer', borderRadius: '3px' }} />
+        <div className="custom-color-row">
+          <label>Color</label>
+          <input type="color" value={customColor} onChange={e => setCustomColor(e.target.value)} />
         </div>
         <div onPointerDown={() => onDragStart(customShape, customLabel || 'Custom', customColor)}
-          style={{ padding: '6px', borderRadius: '5px', background: customColor, color: '#fff', fontWeight: '600', fontSize: '12px', textAlign: 'center', cursor: 'grab', userSelect: 'none' }}>
+          className="custom-add-btn" style={{ background: customColor }}>
           + Add Shape
         </div>
       </div>
@@ -319,31 +317,30 @@ function BoothVisualiser() {
   }
 
   return (
-    <div id="booth-visualiser" style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px' }}>
-      <DimensionPanel table={state.table} onTableChange={(f, v) => dispatch({ type: ACTION_TYPES.SET_TABLE_DIM, field: f, value: v })} onUni
-tChange={u => dispatch({ type: ACTION_TYPES.SET_UNIT, unit: u })} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+    <div className="booth-visualiser">
+      <DimensionPanel table={state.table} onTableChange={(f, v) => dispatch({ type: ACTION_TYPES.SET_TABLE_DIM, field: f, value: v })} onUnitChange={u => dispatch({ type: ACTION_TYPES.SET_UNIT, unit: u })} />
+      <div className="booth-toolbar">
         <ViewToggle view={state.view} onChange={v => dispatch({ type: ACTION_TYPES.SET_VIEW, view: v })} />
-        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-          <input value={saveName} onChange={e => setSaveName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSave()} placeholder="Layout name…" style={{ padding: '5px 8px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px', width: '150px' }} />
-          <button onClick={handleSave} style={{ border: '1px solid #6c3fc5', color: '#6c3fc5', background: '#fff', padding: '5px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}>💾 Save</button>
-          {saveStatus && <span style={{ fontSize: '12px', color: saveStatus.startsWith('✓') ? '#27ae60' : '#e74c3c' }}>{saveStatus}</span>}
+        <div className="booth-save-group">
+          <input className="booth-save-input" value={saveName} onChange={e => setSaveName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSave()} placeholder="Layout name…" />
+          <button onClick={handleSave} className="booth-save-btn">💾 Save</button>
+          {saveStatus && <span className={`booth-save-status ${saveStatus.startsWith('✓') ? 'success' : 'error'}`}>{saveStatus}</span>}
         </div>
-        <button onClick={() => { dispatch({ type: ACTION_TYPES.CLEAR_LAYOUT }); localStorage.removeItem(LS_KEY); setSelectedId(null); setDragState(null) }} style={{ border: '1px solid #e74c3c', color: '#e74c3c', background: '#fff', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>Clear Layout</button>
+        <button onClick={() => { dispatch({ type: ACTION_TYPES.CLEAR_LAYOUT }); localStorage.removeItem(LS_KEY); setSelectedId(null); setDragState(null) }} className="booth-clear-btn">Clear Layout</button>
       </div>
       {savedLayouts.length > 0 && (
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', padding: '6px 0', borderBottom: '1px solid #eee', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', color: '#888' }}>Saved:</span>
+        <div className="booth-saved-bar">
+          <span className="booth-saved-label">Saved:</span>
           {savedLayouts.map(l => (
-            <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: '3px', background: '#f5f0ff', borderRadius: '4px', padding: '3px 8px', fontSize: '13px' }}>
-              <button onClick={() => handleLoadLayout(l)} title={`Saved: ${new Date(l.savedAt).toLocaleString()}`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6c3fc5', fontWeight: '600', padding: 0 }}>{l.name}</button>
-              <button onClick={async () => { const { deleteBoothLayout: del } = await import('../api'); await del(l.id); loadLayouts() }} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e74c3c', fontSize: '11px', padding: '0 2px' }}>✕</button>
+            <div key={l.id} className="booth-layout-chip">
+              <button onClick={() => handleLoadLayout(l)} title={`Saved: ${new Date(l.savedAt).toLocaleString()}`} className="booth-layout-chip-load">{l.name}</button>
+              <button onClick={async () => { const { deleteBoothLayout: del } = await import('../api'); await del(l.id); loadLayouts() }} title="Delete" className="booth-layout-chip-delete">✕</button>
             </div>
           ))}
         </div>
       )}
-      <div style={{ display: 'flex', gap: '16px' }}>
-        <div style={{ flex: 1 }}>
+      <div className="booth-main-row">
+        <div className="booth-canvas-wrap">
           <BoothCanvas table={state.table} view={state.view} fixtures={state.fixtures} selectedId={selectedId}
             onFixtureDrop={handleFixtureDrop}
             onFixtureMove={(id, x, y) => dispatch({ type: ACTION_TYPES.MOVE_FIXTURE, id, x, y })}

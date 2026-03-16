@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { utils as xlsxUtils, writeFile as xlsxWriteFile } from 'xlsx'
 import { fetchProducts, createProduct, createBulkProducts, updateProduct, deleteProduct, fetchCategories, importProductsExcel } from '../api'
+import './Inventory.css'
 
 const emptyRow = () => ({ name: '', stock: '', price: '', productCode: '' })
 const emptySingle = { name: '', category: '', stock: '', price: '', imageUrl: '', productCode: '', supplier: '', printingCost: '' }
@@ -15,7 +16,7 @@ function CategoryField({ value, onChange, categories }) {
   }, [categories])
 
   if (custom) return (
-    <div style={{ display: 'flex', gap: '0.25rem' }}>
+    <div className="category-field-row">
       <input autoFocus value={value} onChange={e => onChange(e.target.value)} placeholder="New category name" />
       <button type="button" onClick={() => { setCustom(false); onChange('') }} title="Back to list">✕</button>
     </div>
@@ -72,19 +73,19 @@ function ImportSection({ onImported }) {
   return (
     <div className="card">
       <h2>Import from Excel</h2>
-      <p style={{ color: '#888', fontSize: '0.875rem', margin: '0 0 0.75rem' }}>
+      <p className="inv-import-desc">
         Upload a <code>.xlsx</code> file with columns: <code>name, category, supplier, price, stock, printingCost, codePrefix</code>
       </p>
-      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <label className="btn-primary" style={{ cursor: 'pointer', padding: '6px 14px', borderRadius: '4px', fontSize: '0.9rem' }}>
+      <div className="inv-import-actions">
+        <label className="btn-primary inv-import-file-label">
           {loading ? 'Importing…' : '📂 Choose .xlsx file'}
           <input type="file" accept=".xlsx" onChange={handleFile} style={{ display: 'none' }} disabled={loading} />
         </label>
-        <button onClick={downloadSample} style={{ cursor: 'pointer', padding: '6px 14px', borderRadius: '4px', border: '1px solid #6c3fc5', color: '#6c3fc5', background: '#fff', fontSize: '0.9rem' }}>
+        <button onClick={downloadSample} className="inv-import-sample-btn">
           ⬇ Download sample
         </button>
       </div>
-      {status && <p style={{ marginTop: '0.5rem', color: status.startsWith('✓') ? '#27ae60' : '#e74c3c', fontSize: '0.875rem' }}>{status}</p>}
+      {status && <p className={`inv-import-status ${status.startsWith('✓') ? 'success' : 'error'}`}>{status}</p>}
     </div>
   )
 }
@@ -165,11 +166,10 @@ export default function Inventory() {
     <>
       <h1>Inventory</h1>
       <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-          <h2 style={{ margin: 0 }}>{editId ? 'Edit Product' : bulkMode ? 'Bulk Add Products' : 'Add Product'}</h2>
+        <div className="inv-card-header">
+          <h2>{editId ? 'Edit Product' : bulkMode ? 'Bulk Add Products' : 'Add Product'}</h2>
           {!editId && (
-            <button type="button" onClick={() => { setBulkMode(!bulkMode); setError('') }}
-              style={{ fontSize: '0.85rem', padding: '4px 10px', cursor: 'pointer' }}>
+            <button type="button" onClick={() => { setBulkMode(!bulkMode); setError('') }} className="inv-toggle-btn">
               {bulkMode ? '← Single add' : '+ Bulk add'}
             </button>
           )}
@@ -189,7 +189,7 @@ export default function Inventory() {
                   placeholder="e.g. GI" maxLength={10} disabled={!!editId}
                   title={editId ? 'Product code cannot be changed after creation' : ''} />
                 {!editId && form.productCode && (
-                  <small style={{ color: '#888' }}>e.g. {form.productCode}1, {form.productCode}2…</small>
+                  <small className="inv-code-hint">e.g. {form.productCode}1, {form.productCode}2…</small>
                 )}
               </div>
               <div>
@@ -214,7 +214,7 @@ export default function Inventory() {
               </div>
             </div>
             {error && <div className="error">{error}</div>}
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+            <div className="inv-form-actions">
               <button type="submit" className="btn-primary">{editId ? 'Update' : 'Add Product'}</button>
               {editId && <button type="button" onClick={() => { setEditId(null); setForm(emptySingle) }}>Cancel</button>}
             </div>
@@ -225,7 +225,7 @@ export default function Inventory() {
         {bulkMode && !editId && (
           <form onSubmit={handleBulkSubmit}>
             {/* Shared fields */}
-            <div className="form-row" style={{ marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid #eee' }}>
+            <div className="form-row inv-bulk-shared">
               <div>
                 <label>Category (shared)</label>
                 <CategoryField value={shared.category} onChange={v => setShared({ ...shared, category: v })} categories={categories} />
@@ -241,38 +241,38 @@ export default function Inventory() {
               <div>
                 <label>Code Prefix (shared)</label>
                 <input value={shared.productCode} onChange={e => setShared({ ...shared, productCode: e.target.value.toUpperCase() })} placeholder="e.g. GI" maxLength={10} />
-                {shared.productCode && <small style={{ color: '#888' }}>e.g. {shared.productCode}1, {shared.productCode}2…</small>}
+                {shared.productCode && <small className="inv-code-hint">e.g. {shared.productCode}1, {shared.productCode}2…</small>}
               </div>
             </div>
 
             {/* Per-product rows */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0.5rem' }}>
+            <table className="inv-bulk-table">
               <thead>
                 <tr>
-                  <th style={{ textAlign: 'left', padding: '4px 6px' }}>Name *</th>
-                  <th style={{ textAlign: 'left', padding: '4px 6px' }}>Stock</th>
-                  <th style={{ textAlign: 'left', padding: '4px 6px' }}>Price ($)</th>
-                  <th style={{ textAlign: 'left', padding: '4px 6px' }}>Code Prefix override</th>
+                  <th>Name *</th>
+                  <th>Stock</th>
+                  <th>Price ($)</th>
+                  <th>Code Prefix override</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row, i) => (
                   <tr key={i}>
-                    <td style={{ padding: '3px 6px' }}>
-                      <input value={row.name} onChange={e => updateRow(i, 'name', e.target.value)} placeholder="Product name" style={{ width: '100%' }} />
+                    <td>
+                      <input value={row.name} onChange={e => updateRow(i, 'name', e.target.value)} placeholder="Product name" />
                     </td>
-                    <td style={{ padding: '3px 6px' }}>
-                      <input type="number" min="0" value={row.stock} onChange={e => updateRow(i, 'stock', e.target.value)} style={{ width: '70px' }} />
+                    <td>
+                      <input type="number" min="0" value={row.stock} onChange={e => updateRow(i, 'stock', e.target.value)} className="input-stock" />
                     </td>
-                    <td style={{ padding: '3px 6px' }}>
-                      <input type="number" min="0" step="0.01" value={row.price} onChange={e => updateRow(i, 'price', e.target.value)} style={{ width: '80px' }} />
+                    <td>
+                      <input type="number" min="0" step="0.01" value={row.price} onChange={e => updateRow(i, 'price', e.target.value)} className="input-price" />
                     </td>
-                    <td style={{ padding: '3px 6px' }}>
+                    <td>
                       <input value={row.productCode} onChange={e => updateRow(i, 'productCode', e.target.value.toUpperCase())}
-                        placeholder={shared.productCode || '—'} maxLength={10} style={{ width: '80px' }} />
+                        placeholder={shared.productCode || '—'} maxLength={10} className="input-code" />
                     </td>
-                    <td style={{ padding: '3px 6px' }}>
+                    <td>
                       {rows.length > 1 && (
                         <button type="button" onClick={() => removeRow(i)} className="btn-danger btn-sm">✕</button>
                       )}
@@ -282,10 +282,10 @@ export default function Inventory() {
               </tbody>
             </table>
 
-            <button type="button" onClick={addRow} style={{ fontSize: '0.85rem', marginBottom: '0.75rem', cursor: 'pointer' }}>+ Add row</button>
+            <button type="button" onClick={addRow} className="inv-add-row-btn">+ Add row</button>
 
             {error && <div className="error">{error}</div>}
-            <div style={{ marginTop: '0.5rem' }}>
+            <div className="inv-bulk-submit">
               <button type="submit" className="btn-primary">Add {rows.filter(r => r.name.trim()).length || ''} Products</button>
             </div>
           </form>
@@ -297,7 +297,7 @@ export default function Inventory() {
       <div className="card">
         <h2>Products ({products.length})</h2>
         {products.length === 0 ? (
-          <p style={{ color: '#888' }}>No products yet. Add one above.</p>
+          <p className="inv-empty">No products yet. Add one above.</p>
         ) : (
           <table>
             <thead>

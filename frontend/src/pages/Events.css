@@ -1,0 +1,9 @@
+.events-form-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.events-empty {
+  color: #888;
+}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchProducts, fetchSales, recordSale } from '../api'
 import { useEvent } from '../EventContext'
+import './Sales.css'
 
 export default function Sales() {
   const { activeEventId, events } = useEvent()
@@ -36,12 +37,12 @@ export default function Sales() {
     <>
       <h1>Sales</h1>
       {activeEvent && (
-        <p style={{ color: '#888', marginTop: '-0.5rem', marginBottom: '1rem' }}>
+        <p className="sales-subtitle">
           Recording sales for: <strong>{activeEvent.name}</strong>
         </p>
       )}
       {!activeEventId && (
-        <p style={{ color: '#f0a500', marginTop: '-0.5rem', marginBottom: '1rem' }}>
+        <p className="sales-warning">
           ⚠️ No event selected — sales will not be linked to any event.
         </p>
       )}
@@ -73,7 +74,7 @@ export default function Sales() {
       <div className="card">
         <h2>Sale History {activeEvent ? `— ${activeEvent.name}` : '(All Events)'}</h2>
         {sales.length === 0 ? (
-          <p style={{ color: '#888' }}>No sales recorded yet.</p>
+          <p className="sales-subtitle">No sales recorded yet.</p>
         ) : (
           <table>
             <thead>

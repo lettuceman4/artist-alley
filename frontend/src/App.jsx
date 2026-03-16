@@ -1,5 +1,6 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
 import { EventProvider, useEvent } from './EventContext'
+import './App.css'
 import Dashboard from './pages/Dashboard'
 import Inventory from './pages/Inventory'
 import Sales from './pages/Sales'
@@ -9,12 +10,11 @@ import Events from './pages/Events'
 function EventSelector() {
   const { events, activeEventId, setActiveEventId } = useEvent()
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}>
-      <label style={{ fontSize: '0.85rem', opacity: 0.8, whiteSpace: 'nowrap' }}>Event:</label>
+    <div className="event-selector">
+      <label>Event:</label>
       <select
         value={activeEventId ?? ''}
         onChange={e => setActiveEventId(e.target.value ? Number(e.target.value) : null)}
-        style={{ fontSize: '0.85rem' }}
       >
         <option value="">All Events</option>
         {events.map(ev => (

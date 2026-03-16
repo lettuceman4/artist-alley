@@ -1,0 +1,16 @@
+.event-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.event-selector label {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+.event-selector select {
+  font-size: 0.85rem;
+}

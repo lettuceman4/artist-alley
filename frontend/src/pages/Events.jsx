@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createEvent, updateEvent, deleteEvent } from '../api'
 import { useEvent } from '../EventContext'
+import './Events.css'
 
 const empty = { name: '', eventDate: '', location: '' }
 
@@ -59,7 +60,7 @@ export default function Events() {
             </div>
           </div>
           {error && <div className="error">{error}</div>}
-          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+          <div className="events-form-actions">
             <button type="submit" className="btn-primary">{editId ? 'Update' : 'Add Event'}</button>
             {editId && <button type="button" onClick={() => { setEditId(null); setForm(empty) }}>Cancel</button>}
           </div>
@@ -69,7 +70,7 @@ export default function Events() {
       <div className="card">
         <h2>Events ({events.length})</h2>
         {events.length === 0 ? (
-          <p style={{ color: '#888' }}>No events yet. Add one above.</p>
+          <p className="events-empty">No events yet. Add one above.</p>
         ) : (
           <table>
             <thead>
