@@ -187,11 +187,11 @@ export function BoothCanvas({ table, view, fixtures, selectedId, onFixtureDrop, 
     if (dragState.source === 'palette') {
       const { w, h } = getDefaults(dragState.type)
       const { x, y } = clamp(px / scaleFactor, py / scaleFactor, w, h)
-      setGhostPos({ x: x * scaleFactor, y: y * scaleFactor, width: w * scaleFactor, height: h * scaleFactor, color: dragState.color || '#6c3fc5' })
+      setGhostPos({ type: dragState.type, x: x * scaleFactor, y: y * scaleFactor, width: w * scaleFactor, height: h * scaleFactor, color: dragState.color || '#6c3fc5' })
     } else if (dragState.source === 'canvas') {
       const f = fixtures.find(f => f.id === dragState.fixtureId); if (!f) return
       const { x, y } = clamp((px - dragState.offsetX) / scaleFactor, (py - dragState.offsetY) / scaleFactor, f.width, f.height)
-      setGhostPos({ x: x * scaleFactor, y: y * scaleFactor, width: f.width * scaleFactor, height: f.height * scaleFactor, color: f.color || '#6c3fc5' })
+      setGhostPos({ type: f.type, x: x * scaleFactor, y: y * scaleFactor, width: f.width * scaleFactor, height: f.height * scaleFactor, color: f.color || '#6c3fc5' })
     }
   }
 
@@ -228,7 +228,13 @@ export function BoothCanvas({ table, view, fixtures, selectedId, onFixtureDrop, 
         {fixtures.map(f => (
           <FixtureRect key={f.id} fixture={f} scaleFactor={scaleFactor} canvasRealW={canvasRealW} canvasRealH={canvasRealH} isSelected={f.id === selectedId} color={f.color || '#6c3fc5'} unit={table.unit} onPointerDown={handleFixturePointerDown} onResize={onFixtureResize} onDelete={onFixtureDelete} onSelect={onFixtureSelect} opacity={dragState?.source === 'canvas' && dragState.fixtureId === f.id ? 0.25 : 0.85} />
         ))}
-        {ghostPos && <rect x={ghostPos.x} y={ghostPos.y} width={ghostPos.width} height={ghostPos.height} fill={ghostPos.color} opacity={0.45} stroke="#fff" strokeWidth={2} strokeDasharray="4 2" style={{ pointerEvents: 'none' }} />}
+        {ghostPos && (() => {
+          const { type, x, y, width: w, height: h, color } = ghostPos
+          const ghostProps = { fill: color, opacity: 0.45, stroke: '#fff', strokeWidth: 2, strokeDasharray: '4 2', style: { pointerEvents: 'none' } }
+          if (type === 'circle') return <ellipse cx={x + w / 2} cy={y + h / 2} rx={w / 2} ry={h / 2} {...ghostProps} />
+          if (type === 'triangle') return <polygon points={`${x + w / 2},${y} ${x + w},${y + h} ${x},${y + h}`} {...ghostProps} />
+          return <rect x={x} y={y} width={w} height={h} rx={type === 'line' ? 3 : 5} {...ghostProps} />
+        })()}
       </svg>
     </div>
   )
